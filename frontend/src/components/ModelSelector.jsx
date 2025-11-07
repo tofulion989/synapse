@@ -64,10 +64,11 @@ export default function ModelSelector({
     onSelect?.(name)
   }
 
-  const providerWarnings = useMemo(() => {
-    const entries = Object.entries(providerStatus || {})
-    return entries.filter(([, status]) => status && status !== 'ok')
-  }, [providerStatus])
+  const providerWarnings = useMemo(
+    () =>
+      (providerStatus || []).filter((entry) => entry.status && entry.status !== 'ok'),
+    [providerStatus],
+  )
 
   const handleProviderClick = (provider) => {
     onOpenSettings?.(provider)
@@ -117,7 +118,7 @@ export default function ModelSelector({
         ))}
         {providerWarnings.length > 0 && (
           <div className="provider-warnings">
-            {providerWarnings.map(([provider, status]) => (
+            {providerWarnings.map(({ provider, status, message }) => (
               <button
                 key={provider}
                 type="button"
@@ -125,6 +126,7 @@ export default function ModelSelector({
                 onClick={() => handleProviderClick(provider)}
               >
                 {provider} ({status})
+                {message ? ` — ${message}` : null}
               </button>
             ))}
           </div>
@@ -147,7 +149,13 @@ ModelSelector.propTypes = {
   activeModel: PropTypes.string,
   onSelect: PropTypes.func,
   disabled: PropTypes.bool,
-  providerStatus: PropTypes.objectOf(PropTypes.string),
+  providerStatus: PropTypes.arrayOf(
+    PropTypes.shape({
+      provider: PropTypes.string.isRequired,
+      status: PropTypes.string.isRequired,
+      message: PropTypes.string,
+    }),
+  ),
   onOpenSettings: PropTypes.func,
 }
 
@@ -155,6 +163,6 @@ ModelSelector.defaultProps = {
   models: [],
   activeModel: '',
   disabled: false,
-  providerStatus: {},
+  providerStatus: [],
   onOpenSettings: undefined,
 }

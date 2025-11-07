@@ -10,7 +10,13 @@ import requests
 from litellm import completion, model_cost, token_counter
 
 from .config import Settings, get_settings
-from .models import ChatMessage, MemoryRecord, ModelInfo
+from .models import (
+    ChatMessage,
+    MemoryRecord,
+    ModelListResponse,
+    ModelMetadata,
+    ProviderStatus,
+)
 
 
 class LLMRouter:
@@ -23,47 +29,41 @@ class LLMRouter:
         self._probe_ollama(initial=True)
 
     @property
-    def models(self) -> Dict[str, Any]:
+    def models(self) -> ModelListResponse:
         self._probe_ollama()
         local_models = [
-            ModelInfo(
+            ModelMetadata(
                 name=f"ollama/{tag}",
                 provider="ollama",
-                default=False,
-                description=None,
                 source="local",
-                ctx=None,
-                cost_per_1k=None,
             )
             for tag in self.ollama_tags
         ]
 
-        cloud_models = []
-        provider_status = {}
-        for provider, key in self.settings.provider_keys.items():
+        cloud_models: List[ModelMetadata] = []
+        provider_status_entries: List[ProviderStatus] = []
+        for provider in ["openai", "anthropic", "groq"]:
             status, models = self._cloud_models_for(provider)
-            provider_status[provider] = status
-            if status == "ok":
+            provider_status_entries.append(ProviderStatus(provider=provider, status=status))
+            if status == "ok" and models:
                 cloud_models.extend(models)
-            elif status == "no_key":
-                provider_status[provider] = "no_key"
-            else:
-                provider_status[provider] = "offline"
 
-        all_models: List[ModelInfo] = []
+        all_models: List[ModelMetadata] = []
         for model in local_models + cloud_models:
             if not model.name:
                 continue
-            model.ctx = self._model_limit(model.name)
-            model.cost_per_1k = self._model_cost(model.name)
             model.available = True
+            limit = self._model_limit(model.name)
+            cost = self._model_cost(model.name)
+            model.ctx = limit
+            model.cost_per_1k = cost
             all_models.append(model)
 
-        return {
-            "models": all_models,
-            "provider_status": provider_status,
-            "ollama_status": "ok" if self.ollama_online else "offline",
-        }
+        return ModelListResponse(
+            models=all_models,
+            provider_status=provider_status_entries,
+            ollama_status="ok" if self.ollama_online else "offline",
+        )
 
     async def chat(
         self,
@@ -358,7 +358,7 @@ class LLMRouter:
                 self.ollama_online = False
                 if attempt + 1 < attempts:
                     time.sleep(3)
-    def _cloud_models_for(self, provider: str) -> Tuple[str, List[ModelInfo]]:
+    def _cloud_models_for(self, provider: str) -> Tuple[str, List[ModelMetadata]]:
         key = self.settings.provider_keys.get(provider)
         if not key:
             return "no_key", []
@@ -374,14 +374,10 @@ class LLMRouter:
             return "no_models", []
 
         return "ok", [
-            ModelInfo(
+            ModelMetadata(
                 name=model,
                 provider=provider,
-                default=model == self.settings.default_model,
-                description=None,
                 source="cloud",
-                ctx=None,
-                cost_per_1k=None,
             )
             for model in models
         ]

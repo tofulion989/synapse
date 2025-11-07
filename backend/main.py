@@ -25,7 +25,7 @@ from .models import (
     MemorySuggestion,
     MemorySuggestionRequest,
     MemorySuggestionResponse,
-    ModelInfo,
+    ModelListResponse,
     SummarizeRequest,
     SummarizeResponse,
 )
