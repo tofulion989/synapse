@@ -58,8 +58,8 @@ export function useSynapseApi() {
   }, [])
 
   const refreshModels = useCallback(
-    withLoading('models', async () => {
-      const response = await listModels()
+    withLoading('models', async (options = {}) => {
+      const response = await listModels(options)
       setModels(response?.models || [])
       setProviderStatus(response?.provider_status || [])
       setOllamaStatus(response?.ollama_status || 'unknown')

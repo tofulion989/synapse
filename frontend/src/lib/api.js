@@ -63,8 +63,11 @@ async function request(path, options = {}) {
   return payload
 }
 
-export async function listModels() {
-  return request('/api/models')
+export async function listModels(params = {}) {
+  const search = new URLSearchParams()
+  if (params.force) search.set('force', 'true')
+  const suffix = search.toString() ? `?${search}` : ''
+  return request(`/api/models${suffix}`)
 }
 
 export async function listMemories({ query, tags, limit } = {}) {

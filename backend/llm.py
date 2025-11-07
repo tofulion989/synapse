@@ -32,10 +32,29 @@ class LLMRouter:
         self.prefs_path.parent.mkdir(parents=True, exist_ok=True)
         self.model_prefs = self._load_model_prefs()
         self.ollama_status = "unknown"
+        self._model_cache_data: Optional[ModelListResponse] = None
+        self._model_cache_time: float = 0.0
         self._probe_ollama(initial=True)
 
     @property
     def models(self) -> ModelListResponse:
+        return self.get_models()
+
+    def get_models(self, force: bool = False) -> ModelListResponse:
+        now = time.time()
+        if (
+            not force
+            and self._model_cache_data is not None
+            and now - self._model_cache_time < 30
+        ):
+            return self._model_cache_data
+
+        response = self._build_model_response()
+        self._model_cache_data = response
+        self._model_cache_time = now
+        return response
+
+    def _build_model_response(self) -> ModelListResponse:
         self._probe_ollama()
         local_models = [
             ModelMetadata(
@@ -364,6 +383,7 @@ class LLMRouter:
         for pref in preferences:
             self.model_prefs[pref.name] = bool(pref.enabled)
         self._save_model_prefs()
+        self._model_cache_data = None
 
     def _probe_ollama(self, initial: bool = False) -> None:
         endpoints = [self.settings.ollama_base_url.rstrip("/"), "http://127.0.0.1:11434"]

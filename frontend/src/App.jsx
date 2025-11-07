@@ -71,7 +71,7 @@ function App() {
   const handleCloseConfig = () => setActiveView('workspace')
   const handleSavePreferences = async (preferences) => {
     await updateModelPreferences(preferences)
-    refreshModels()
+    refreshModels({ force: true })
   }
   const [activeView, setActiveView] = useState('workspace')
 

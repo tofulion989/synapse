@@ -107,8 +107,11 @@ async def ollama_status(router: LLMRouter = Depends(get_llm_router)) -> dict:
     }
 
 @api_router.get("/models", response_model=ModelListResponse)
-async def list_models(router: LLMRouter = Depends(get_llm_router)) -> ModelListResponse:
-    payload = router.models
+async def list_models(
+    force: bool = Query(False),
+    router: LLMRouter = Depends(get_llm_router),
+) -> ModelListResponse:
+    payload = router.get_models(force=force)
     logging.info(
         "Model list returned with status %s, models=%s",
         payload.ollama_status,

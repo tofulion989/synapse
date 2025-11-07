@@ -1,16 +1,44 @@
 import { useEffect, useMemo, useState } from 'react'
 import PropTypes from 'prop-types'
 
+import { listModels } from '../lib/api'
+
 export default function ConfigPage({
-  models,
-  providerStatus,
+  models: initialModels,
+  providerStatus: initialStatus,
   onSavePreferences,
   onRefresh,
   saving,
   onClose,
 }) {
+  const [models, setModels] = useState(initialModels)
+  const [statuses, setStatuses] = useState(initialStatus)
   const [draft, setDraft] = useState({})
   const [toast, setToast] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState(null)
+
+  const load = async (force = false) => {
+    setLoading(true)
+    try {
+      const response = await listModels({ force })
+      setModels(response.models || [])
+      setStatuses(response.provider_status || [])
+      onRefresh?.({ force: true })
+      const ts = new Date()
+      setLastUpdated(ts)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch (err) {
+      setToast(err.message || 'Failed to refresh models')
+      setTimeout(() => setToast(null), 3000)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load(true)
+  }, [])
 
   useEffect(() => {
     const stored = localStorage.getItem('model_prefs_draft')
@@ -32,7 +60,7 @@ export default function ConfigPage({
     })
     setDraft(next)
     localStorage.setItem('model_prefs_draft', JSON.stringify(next))
-  }, [models.length])
+  }, [models])
 
   const grouped = useMemo(() => {
     const map = {}
@@ -60,7 +88,7 @@ export default function ConfigPage({
     await onSavePreferences(preferences)
     setToast('Preferences saved')
     setTimeout(() => setToast(null), 3000)
-    onRefresh?.()
+    await load(true)
   }
 
   return (
@@ -68,27 +96,36 @@ export default function ConfigPage({
       <header className="config-header">
         <h1>Model Configuration</h1>
         <div className="config-actions">
-          <button type="button" className="text-button" onClick={onClose}>
-            Back
-          </button>
-          <button
-            type="button"
-            className="primary"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
+          <span className="config-updated">
+            {lastUpdated ? `last updated: ${lastUpdated.toLocaleTimeString()}` : ''}
+          </span>
+          <div className="config-buttons">
+            <button type="button" className="text-button" onClick={() => load(true)}>
+              Refresh
+            </button>
+            <button type="button" className="text-button" onClick={onClose}>
+              Back
+            </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={handleSave}
+              disabled={saving || loading}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
         </div>
       </header>
       {toast && <div className="status-banner">{toast}</div>}
       <div className="provider-status">
-        {providerStatus.map(({ provider, status }) => (
+        {(statuses || []).map(({ provider, status }) => (
           <span key={provider}>
             {provider}: {status}
           </span>
         ))}
       </div>
+      {loading && <p>Loading models…</p>}
       <div className="config-groups">
         {Object.entries(grouped).map(([provider, list]) => (
           <section key={provider}>

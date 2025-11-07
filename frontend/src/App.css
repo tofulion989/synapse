@@ -270,6 +270,22 @@
   align-items: center;
 }
 
+.config-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.config-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.config-updated {
+  font-size: 0.8rem;
+  color: #475569;
+}
+
 .config-groups {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -291,23 +307,69 @@
 }
 
 .config-groups li {
-  padding: 0.3rem 0;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.config-groups li:last-child {
-  border-bottom: none;
-}
-
-.config-groups label {
-  display: flex;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.75rem;
   align-items: center;
-  font-size: 0.9rem;
+  padding: 0.4rem;
+  border-radius: 8px;
+}
+
+.config-groups li:nth-child(odd) {
+  background: #f8fafc;
 }
 
 .config-model-name {
   font-weight: 600;
+}
+
+.config-row-meta {
+  font-size: 0.8rem;
+  color: #475569;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 18px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: #cbd5f5;
+  border-radius: 999px;
+  transition: 0.2s;
+}
+
+.slider::before {
+  position: absolute;
+  content: '';
+  height: 14px;
+  width: 14px;
+  left: 2px;
+  top: 2px;
+  background: #fff;
+  border-radius: 50%;
+  transition: 0.2s;
+}
+
+.switch input:checked + .slider {
+  background: #6366f1;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(18px);
 }
 
 .memory-search input {

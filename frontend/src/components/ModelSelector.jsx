@@ -26,7 +26,6 @@ export default function ModelSelector({
     () => validModels.filter((model) => model.provider === 'ollama'),
     [validModels],
   )
-
   const cloudModels = useMemo(
     () => validModels.filter((model) => model.provider !== 'ollama'),
     [validModels],
@@ -58,20 +57,11 @@ export default function ModelSelector({
     onOpenSettings?.(provider)
   }
 
-  if (!localModels.length && !cloudModels.length) {
-    return (
-      <section className="model-selector">
-        <header className="panel-header">
-          <h2>Models</h2>
-        </header>
-        <p className="muted">No models available.</p>
-      </section>
-    )
-  }
-
   const renderGroup = (title, items) => (
     <div className="model-section">
-      <h4 className="model-section__header">{title} ({items.length})</h4>
+      <h4 className="model-section__header">
+        {title} ({items.length})
+      </h4>
       <ul className="model-list">
         {items.length === 0 ? (
           <li className="muted">None available</li>
@@ -133,7 +123,8 @@ ModelSelector.propTypes = {
     PropTypes.shape({
       name: PropTypes.string.isRequired,
       provider: PropTypes.string,
-      category: PropTypes.string,
+      source: PropTypes.string,
+      enabled: PropTypes.bool,
       available: PropTypes.bool,
       model_status: PropTypes.string,
     }),
