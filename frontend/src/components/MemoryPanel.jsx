@@ -1,40 +1,73 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 
 const placeholderTags = (tags = []) =>
-  tags.map((tag) => tag.startsWith('#') ? tag : `#${tag}`).join(' ')
+  tags.map((tag) => (tag.startsWith('#') ? tag : `#${tag}`)).join(' ')
 
-export default function MemoryPanel({
-  memories,
-  selectedIds,
-  tags,
-  activeTags,
-  suggestions,
-  duplicateGroups,
-  contradictionReport,
-  onToggleMemory,
-  onRefresh,
-  onCreateMemory,
-  onSearch,
-  onToggleTag,
-  onClearTags,
-  onExport,
-  onImport,
-  onApproveSuggestion,
-  onCheckDuplicates,
-  onMergeDuplicates,
-  onCheckContradictions,
-  searchQuery,
-  loading,
-}) {
-  const [formState, setFormState] = useState({
-    title: '',
-    content: '',
-    tags: '',
-  })
+const defaultSections = {
+  memories: true,
+  tags: true,
+  intelligence: true,
+  settings: true,
+}
+
+export default function MemoryPanel(props) {
+  const {
+    memories,
+    selectedIds,
+    tags,
+    activeTags,
+    suggestions,
+    duplicateGroups,
+    contradictionReport,
+    onToggleMemory,
+    onRefresh,
+    onCreateMemory,
+    onSearch,
+    onToggleTag,
+    onClearTags,
+    onExport,
+    onImport,
+    onApproveSuggestion,
+    onCheckDuplicates,
+    onMergeDuplicates,
+    onCheckContradictions,
+    searchQuery,
+    loading,
+  } = props
+
+  const [formState, setFormState] = useState({ title: '', content: '', tags: '' })
   const fileInputRef = useRef(null)
-
   const isSelected = useMemo(() => new Set(selectedIds), [selectedIds])
+  const memoryLookup = useMemo(
+    () => Object.fromEntries(memories.map((memory) => [memory.id, memory])),
+    [memories],
+  )
+  const [duplicateSelection, setDuplicateSelection] = useState({})
+  const [sections, setSections] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('memory_panel_sections')) || defaultSections
+    } catch {
+      return defaultSections
+    }
+  })
+
+  useEffect(() => {
+    localStorage.setItem('memory_panel_sections', JSON.stringify(sections))
+  }, [sections])
+
+  useEffect(() => {
+    setDuplicateSelection({})
+  }, [duplicateGroups])
+
+  const selectedDuplicateIds = useMemo(
+    () => Object.entries(duplicateSelection).filter(([, checked]) => checked).map(([id]) => id),
+    [duplicateSelection],
+  )
+
+  const updateSection = (key) => {
+    setSections((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
 
   const handleInputChange = (event) => {
     const { name, value } = event.target
@@ -50,16 +83,12 @@ export default function MemoryPanel({
       .map((tag) => tag.trim())
       .filter(Boolean)
 
-    try {
-      await onCreateMemory?.({
-        title: formState.title.trim() || null,
-        content: formState.content.trim(),
-        tags,
-      })
-      setFormState({ title: '', content: '', tags: '' })
-    } catch (error) {
-      console.error(error)
-    }
+    await onCreateMemory?.({
+      title: formState.title.trim() || null,
+      content: formState.content.trim(),
+      tags,
+    })
+    setFormState({ title: '', content: '', tags: '' })
   }
 
   const handleImportClick = () => {
@@ -76,183 +105,231 @@ export default function MemoryPanel({
     }
   }
 
+  const handleDuplicateToggle = (memoryId) => {
+    setDuplicateSelection((prev) => ({
+      ...prev,
+      [memoryId]: !prev[memoryId],
+    }))
+  }
+
+  const renderSection = (title, key, content) => (
+    <div className="collapsible">
+      <button type="button" className="collapsible-header" onClick={() => updateSection(key)}>
+        <span>{sections[key] ? '▼' : '▶'}</span>
+        <strong>{title}</strong>
+      </button>
+      <div className={`collapsible-body ${sections[key] ? 'open' : ''}`}>{content}</div>
+    </div>
+  )
+
   return (
     <section className="memory-panel">
       <header className="panel-header">
         <h2>Memory Spine</h2>
-        <div className="panel-actions">
-          <div className="memory-toolbar">
-            <button
-              type="button"
-              className="text-button"
-              onClick={onRefresh}
-              disabled={loading}
-            >
-              Refresh
-            </button>
-            <button type="button" className="text-button" onClick={onExport}>
-              Export
-            </button>
-            <button type="button" className="text-button" onClick={handleImportClick}>
-              Import
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json"
-              hidden
-              onChange={handleFileChange}
-            />
-          </div>
-        </div>
       </header>
 
-      <div className="memory-search">
-        <input
-          type="search"
-          placeholder="Search memories…"
-          value={searchQuery}
-          onChange={(event) => onSearch?.(event.target.value)}
-        />
-      </div>
-
-      {suggestions?.length > 0 && (
-        <div className="suggestions-panel">
-          <div className="tag-filter-header">
-            <span>Suggested Memories</span>
+      {renderSection(
+        'Memories',
+        'memories',
+        <>
+          <div className="memory-search">
+            <input
+              type="search"
+              placeholder="Search memories…"
+              value={searchQuery}
+              onChange={(event) => onSearch?.(event.target.value)}
+            />
           </div>
-          <div className="suggestion-list">
-            {suggestions.map(({ memory, score }) => (
-              <div key={memory.id} className="suggestion-item">
-                <div>
-                  <strong>{memory.title || memory.id.slice(0, 8)}</strong>
-                  <p>{memory.content}</p>
-                  <small>Score: {score ? score.toFixed(2) : 'n/a'}</small>
-                </div>
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={() => onApproveSuggestion?.(memory.id)}
-                >
-                  Add
-                </button>
+          {suggestions?.length > 0 && (
+            <div className="suggestions-panel">
+              <div className="tag-filter-header">
+                <span>Suggested Memories</span>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {tags.length > 0 && (
-        <div className="memory-tag-filters">
-          <div className="tag-filter-header">
-            <span>Tags</span>
-            {activeTags.length > 0 && (
-              <button type="button" className="text-button" onClick={onClearTags}>
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="tag-chip-row">
-            {tags.map(({ tag, count }) => (
-              <button
-                key={tag}
-                type="button"
-                className={`tag-chip ${activeTags.includes(tag) ? 'is-active' : ''}`}
-                onClick={() => onToggleTag?.(tag)}
-              >
-                {tag}
-                <span>{count}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="memory-list">
-        {loading && <p className="muted">Loading memories…</p>}
-        {!loading && memories.length === 0 && (
-          <p className="muted">No memories yet — add your first note below.</p>
-        )}
-        {!loading &&
-          memories.map((memory) => (
-            <label key={memory.id} className="memory-item">
-              <input
-                type="checkbox"
-                checked={isSelected.has(memory.id)}
-                onChange={() => onToggleMemory?.(memory.id)}
-              />
-              <div className="memory-body">
-                <div className="memory-title">
-                  {memory.title || memory.id.slice(0, 8)}
-                </div>
-                <div className="memory-content">{memory.content}</div>
-                {memory.tags?.length > 0 && (
-                  <div className="memory-tags">
-                    {placeholderTags(memory.tags)}
+              <div className="suggestion-list">
+                {suggestions.map(({ memory, score }) => (
+                  <div key={memory.id} className="suggestion-item">
+                    <div>
+                      <strong>{memory.title || memory.id.slice(0, 8)}</strong>
+                      <p>{memory.content}</p>
+                      <small>Score: {score ? score.toFixed(2) : 'n/a'}</small>
+                    </div>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => onApproveSuggestion?.(memory.id)}
+                    >
+                      Add
+                    </button>
                   </div>
-                )}
+                ))}
               </div>
-            </label>
-          ))}
-      </div>
+            </div>
+          )}
+          <div className="memory-list">
+            {loading && <p className="muted">Loading memories…</p>}
+            {!loading && memories.length === 0 && (
+              <p className="muted">No memories yet — add your first note below.</p>
+            )}
+            {!loading &&
+              memories.map((memory) => (
+                <label key={memory.id} className="memory-item">
+                  <input
+                    type="checkbox"
+                    checked={isSelected.has(memory.id)}
+                    onChange={() => onToggleMemory?.(memory.id)}
+                  />
+                  <div className="memory-body">
+                    <div className="memory-title">
+                      {memory.title || memory.id.slice(0, 8)}
+                    </div>
+                    <div className="memory-content">{memory.content}</div>
+                    {memory.tags?.length > 0 && (
+                      <div className="memory-tags">{placeholderTags(memory.tags)}</div>
+                    )}
+                  </div>
+                </label>
+              ))}
+          </div>
+        </>,
+      )}
 
-      <div className="intelligence-panel">
-        <h3>Intelligence</h3>
-        <div className="intelligence-actions">
-          <button type="button" className="text-button" onClick={onCheckDuplicates}>
-            Find duplicates
-          </button>
-          <button type="button" className="text-button" onClick={onCheckContradictions}>
-            Check contradictions
-          </button>
-        </div>
-        {duplicateGroups?.length > 0 && (
-          <div className="duplicate-list">
-            {duplicateGroups.map((group, index) => (
-              <div key={`${group.join('-')}-${index}`} className="duplicate-row">
-                <span>{group.join(' + ')}</span>
-                <button type="button" className="text-button" onClick={() => onMergeDuplicates?.(group)}>
-                  Merge
+      {renderSection(
+        'Tags',
+        'tags',
+        tags.length > 0 ? (
+          <div className="memory-tag-filters">
+            <div className="tag-filter-header">
+              <span>Tags</span>
+              {activeTags.length > 0 && (
+                <button type="button" className="text-button" onClick={onClearTags}>
+                  Clear
                 </button>
-              </div>
-            ))}
+              )}
+            </div>
+            <div className="tag-chip-row">
+              {tags.map(({ tag, count }) => (
+                <button
+                  key={tag}
+                  type="button"
+                  className={`tag-chip ${activeTags.includes(tag) ? 'is-active' : ''}`}
+                  onClick={() => onToggleTag?.(tag)}
+                >
+                  {tag}
+                  <span>{count}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        )}
-        {contradictionReport && (
-          <div className="contradiction-report">
-            <strong>Contradictions</strong>
-            <p>{contradictionReport}</p>
-          </div>
-        )}
-      </div>
+        ) : (
+          <p className="muted">No tags yet.</p>
+        ),
+      )}
 
-      <form className="memory-form" onSubmit={handleSubmit}>
-        <h3>Add Memory</h3>
-        <input
-          name="title"
-          type="text"
-          placeholder="Optional title"
-          value={formState.title}
-          onChange={handleInputChange}
-        />
-        <textarea
-          name="content"
-          placeholder="What do you want to remember?"
-          value={formState.content}
-          onChange={handleInputChange}
-          rows={4}
-        />
-        <input
-          name="tags"
-          type="text"
-          placeholder="Tags (comma separated)"
-          value={formState.tags}
-          onChange={handleInputChange}
-        />
-        <button type="submit" className="primary" disabled={loading}>
-          Save Memory
-        </button>
-      </form>
+      {renderSection(
+        'Intelligence',
+        'intelligence',
+        <div className="intelligence-panel">
+          <div className="intelligence-actions">
+            <button type="button" className="text-button" onClick={onCheckDuplicates}>
+              Find duplicates
+            </button>
+            <button type="button" className="text-button" onClick={onCheckContradictions}>
+              Check contradictions
+            </button>
+          </div>
+          {duplicateGroups?.length > 0 && (
+            <div className="duplicate-list">
+              {duplicateGroups.map((group) => (
+                <div key={group.ids.join('-')} className="duplicate-row">
+                  <div>
+                    <div className="duplicate-score">Score: {group.score.toFixed(2)}</div>
+                    <div className="duplicate-ids">
+                      {group.ids.map((id) => (
+                        <label key={id}>
+                          <input
+                            type="checkbox"
+                            checked={!!duplicateSelection[id]}
+                            onChange={() => handleDuplicateToggle(id)}
+                          />
+                          <span>{memoryLookup[id]?.title || id.slice(0, 8)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="primary"
+                disabled={selectedDuplicateIds.length < 2}
+                onClick={() => onMergeDuplicates?.(selectedDuplicateIds)}
+              >
+                Merge Selected
+              </button>
+            </div>
+          )}
+          {contradictionReport && (
+            <div className="contradiction-report">
+              <strong>Contradictions</strong>
+              <p>{contradictionReport}</p>
+            </div>
+          )}
+        </div>,
+      )}
+
+      {renderSection(
+        'Settings',
+        'settings',
+        <>
+          <div className="panel-actions">
+            <div className="memory-toolbar">
+              <button type="button" className="text-button" onClick={onRefresh} disabled={loading}>
+                Refresh
+              </button>
+              <button type="button" className="text-button" onClick={onExport}>
+                Export
+              </button>
+              <button type="button" className="text-button" onClick={handleImportClick}>
+                Import
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json"
+                hidden
+                onChange={handleFileChange}
+              />
+            </div>
+          </div>
+          <form className="memory-form" onSubmit={handleSubmit}>
+            <h3>Add Memory</h3>
+            <input
+              name="title"
+              type="text"
+              placeholder="Optional title"
+              value={formState.title}
+              onChange={handleInputChange}
+            />
+            <textarea
+              name="content"
+              placeholder="What do you want to remember?"
+              value={formState.content}
+              onChange={handleInputChange}
+              rows={4}
+            />
+            <input
+              name="tags"
+              type="text"
+              placeholder="Tags (comma separated)"
+              value={formState.tags}
+              onChange={handleInputChange}
+            />
+            <button type="submit" className="primary" disabled={loading}>
+              Save Memory
+            </button>
+          </form>
+        </>,
+      )}
     </section>
   )
 }
@@ -283,7 +360,12 @@ MemoryPanel.propTypes = {
       score: PropTypes.number,
     }),
   ),
-  duplicateGroups: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.string)),
+  duplicateGroups: PropTypes.arrayOf(
+    PropTypes.shape({
+      ids: PropTypes.arrayOf(PropTypes.string).isRequired,
+      score: PropTypes.number.isRequired,
+    }),
+  ),
   contradictionReport: PropTypes.string,
   onToggleMemory: PropTypes.func,
   onRefresh: PropTypes.func,

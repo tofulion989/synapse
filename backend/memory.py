@@ -4,7 +4,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 from uuid import uuid4
 
 try:
@@ -286,10 +286,19 @@ class MemoryStore:
         title: Optional[str] = None,
         tags: Optional[List[str]] = None,
     ) -> MemoryRecord:
-        record = self.add_memory(
-            MemoryCreate(title=title or "Summary", content=summary, tags=tags or ["#summary"]),
+        existing = self.get_memories_by_ids(memory_ids)
+        latest_created = max((m.created_at for m in existing), default=datetime.utcnow())
+        latest_updated = max((m.updated_at for m in existing), default=datetime.utcnow())
+
+        imported = MemoryImportRecord(
+            title=title or "Summary",
+            content=summary,
+            tags=tags or ["#summary"],
+            created_at=latest_created,
+            updated_at=latest_updated,
             source="summary",
         )
+        record = self.upsert_memory(imported, source="summary")
         if delete_originals and memory_ids:
             self.delete_memories(memory_ids)
         return record
@@ -301,23 +310,51 @@ class MemoryStore:
         with self._transaction() as cur:
             cur.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", memory_ids)
 
-    def find_duplicates(self, threshold: float = 0.9) -> List[List[str]]:
-        memories = self.list_memories(limit=500)
+    def find_duplicates(self, threshold: float = 0.9) -> List[dict]:
+        memories = self.list_memories(limit=1000)
         embeddings = {memory.id: self._cheap_embedding(memory.content) for memory in memories}
-        duplicates = []
-        seen_pairs = set()
+
+        parent = {}
+
+        def find(x):
+            parent.setdefault(x, x)
+            if parent[x] != x:
+                parent[x] = find(parent[x])
+            return parent[x]
+
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[rb] = ra
+
+        similarity_scores: Dict[Tuple[str, str], float] = {}
 
         for i, mem_a in enumerate(memories):
             emb_a = embeddings[mem_a.id]
             for mem_b in memories[i + 1 :]:
-                pair = tuple(sorted((mem_a.id, mem_b.id)))
-                if pair in seen_pairs:
-                    continue
                 score = self._cosine_similarity(emb_a, embeddings[mem_b.id])
                 if score >= threshold:
-                    duplicates.append(list(pair))
-                    seen_pairs.add(pair)
-        return duplicates
+                    union(mem_a.id, mem_b.id)
+                    similarity_scores[tuple(sorted((mem_a.id, mem_b.id)))] = score
+
+        groups: Dict[str, List[str]] = {}
+        for memory in memories:
+            root = find(memory.id)
+            groups.setdefault(root, []).append(memory.id)
+
+        results = []
+        for members in groups.values():
+            if len(members) < 2:
+                continue
+            max_score = 0.0
+            for i, a in enumerate(members):
+                for b in members[i + 1 :]:
+                    score = similarity_scores.get(tuple(sorted((a, b))), 0.0)
+                    max_score = max(max_score, score)
+            results.append({"ids": members, "score": max_score})
+
+        results.sort(key=lambda item: item["score"], reverse=True)
+        return results
 
     # ------------------------------------------------------------------ helpers
 

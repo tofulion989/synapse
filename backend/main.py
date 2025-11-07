@@ -18,6 +18,7 @@ from .models import (
     ContradictionRequest,
     ContradictionResponse,
     DuplicateCheckResponse,
+    DuplicateGroup,
     MemoryCreate,
     MemoryImportRequest,
     MemoryRecord,
@@ -168,7 +169,8 @@ async def deduplicate_memories(
     store: MemoryStore = Depends(get_memory_store),
 ) -> DuplicateCheckResponse:
     duplicates = store.find_duplicates(threshold=threshold)
-    return DuplicateCheckResponse(duplicates=duplicates)
+    wrapped = [DuplicateGroup(ids=item["ids"], score=item["score"]) for item in duplicates]
+    return DuplicateCheckResponse(duplicates=wrapped)
 
 
 @api_router.post("/memories/consolidate", response_model=MemoryRecord)

@@ -130,8 +130,13 @@ class ConsolidateRequest(BaseModel):
     delete_originals: bool = False
 
 
+class DuplicateGroup(BaseModel):
+    ids: List[str]
+    score: float
+
+
 class DuplicateCheckResponse(BaseModel):
-    duplicates: List[List[str]] = Field(default_factory=list)
+    duplicates: List[DuplicateGroup] = Field(default_factory=list)
 
 
 class ContradictionRequest(BaseModel):
