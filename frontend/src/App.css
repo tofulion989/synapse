@@ -151,6 +151,28 @@
   color: #475569;
 }
 
+.model-selectors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.model-dropdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.model-dropdown select {
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5f5;
+  font: inherit;
+  background: #f8fafc;
+}
+
 .memory-search input {
   width: 100%;
   padding: 0.6rem 0.75rem;

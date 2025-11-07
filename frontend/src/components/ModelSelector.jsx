@@ -1,5 +1,20 @@
 import PropTypes from 'prop-types'
 
+const formatContext = (limit) =>
+  limit ? `${Intl.NumberFormat().format(limit)} tokens` : 'context unknown'
+
+const formatCost = (cost) => (cost ? `$${cost.toFixed(4)}/1K` : 'cost unknown')
+
+const optionTitle = (model) => {
+  const parts = [
+    `${model.provider} · ${model.category === 'local' ? 'local' : 'cloud'}`,
+    formatContext(model.context_limit),
+    formatCost(model.cost_per_1k),
+  ]
+  if (model.description) parts.push(model.description)
+  return parts.join(' | ')
+}
+
 export default function ModelSelector({
   models,
   activeModel,
@@ -9,45 +24,27 @@ export default function ModelSelector({
   const localModels = models.filter((model) => model.category === 'local')
   const cloudModels = models.filter((model) => model.category !== 'local')
 
-  const renderList = (list, heading) =>
-    list.length > 0 && (
-      <>
-        <h3 className="model-group-heading">{heading}</h3>
-        <ul>
-          {list.map((model) => (
-            <li key={model.name}>
-              <label className="radio-row">
-                <input
-                  type="radio"
-                  name="model"
-                  value={model.name}
-                  checked={activeModel === model.name}
-                  onChange={() => onSelect?.(model.name)}
-                  disabled={disabled || model.description === 'Ollama offline'}
-                />
-                <span>
-                  <strong>{model.name}</strong>
-                  <em>{model.provider}</em>
-                  {model.description && <small>{model.description}</small>}
-                  <div className="model-meta">
-                    {model.context_limit && (
-                      <span title="Max context tokens">
-                        Context: {Intl.NumberFormat().format(model.context_limit)}
-                      </span>
-                    )}
-                    {model.cost_per_1k && (
-                      <span title="Approximate cost per 1K input tokens">
-                        ${model.cost_per_1k.toFixed(4)}/1K
-                      </span>
-                    )}
-                  </div>
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      </>
-    )
+  const renderDropdown = (list, label) => (
+    <label className="model-dropdown">
+      <span>{label}</span>
+      <select
+        value={
+          list.some((model) => model.name === activeModel) ? activeModel : ''
+        }
+        onChange={(event) => onSelect?.(event.target.value)}
+        disabled={disabled || list.length === 0}
+      >
+        <option value="" disabled>
+          {list.length === 0 ? 'No options' : 'Select model'}
+        </option>
+        {list.map((model) => (
+          <option key={model.name} value={model.name} title={optionTitle(model)}>
+            {model.name} ({model.provider})
+          </option>
+        ))}
+      </select>
+    </label>
+  )
 
   return (
     <section className="model-selector">
@@ -57,10 +54,31 @@ export default function ModelSelector({
       {models.length === 0 ? (
         <p className="muted">No models configured.</p>
       ) : (
-        <>
-          {renderList(localModels, 'Local')}
-          {renderList(cloudModels, 'Cloud')}
-        </>
+        <div className="model-selectors">
+          <label className="model-dropdown">
+            <span>All Models</span>
+            <select
+              value={activeModel}
+              onChange={(event) => onSelect?.(event.target.value)}
+              disabled={disabled}
+            >
+              <option value="" disabled>
+                Choose a model
+              </option>
+              {models.map((model) => (
+                <option
+                  key={model.name}
+                  value={model.name}
+                  title={optionTitle(model)}
+                >
+                  {model.name} ({model.provider})
+                </option>
+              ))}
+            </select>
+          </label>
+          {renderDropdown(localModels, 'Local')}
+          {renderDropdown(cloudModels, 'Cloud')}
+        </div>
       )}
     </section>
   )
@@ -73,6 +91,7 @@ ModelSelector.propTypes = {
       provider: PropTypes.string,
       description: PropTypes.string,
       default: PropTypes.bool,
+      category: PropTypes.string,
     }),
   ),
   activeModel: PropTypes.string,
