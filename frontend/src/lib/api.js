@@ -81,6 +81,13 @@ export async function listTags() {
   return request('/api/memories/tags')
 }
 
+export async function suggestMemories(payload) {
+  return request('/api/memories/suggest', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
 export async function createMemory(memory) {
   return request('/api/memories', {
     method: 'POST',
@@ -147,4 +154,31 @@ export async function chatWithModelStream(payload, { signal } = {}) {
 
 export async function healthCheck() {
   return request('/api/health')
+}
+
+export async function summarizeConversation(payload) {
+  return request('/api/chat/summarize', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function fetchDuplicates(threshold) {
+  return request('/api/memories/deduplicate', {
+    params: threshold ? { threshold } : undefined,
+  })
+}
+
+export async function consolidateMemories(payload) {
+  return request('/api/memories/consolidate', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function detectContradictions(payload) {
+  return request('/api/memories/contradictions', {
+    method: 'POST',
+    body: payload,
+  })
 }

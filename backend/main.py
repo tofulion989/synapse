@@ -14,10 +14,19 @@ from .memory import MemoryStore
 from .models import (
     ChatRequest,
     ChatResponse,
+    ConsolidateRequest,
+    ContradictionRequest,
+    ContradictionResponse,
+    DuplicateCheckResponse,
     MemoryCreate,
     MemoryImportRequest,
     MemoryRecord,
+    MemorySuggestion,
+    MemorySuggestionRequest,
+    MemorySuggestionResponse,
     ModelInfo,
+    SummarizeRequest,
+    SummarizeResponse,
 )
 
 app = FastAPI(title="Synapse Backend", version="0.1.0")
@@ -116,6 +125,16 @@ async def memory_tags(store: MemoryStore = Depends(get_memory_store)) -> List[di
     return store.list_tags()
 
 
+@api_router.post("/memories/suggest", response_model=MemorySuggestionResponse)
+async def suggest_memories(
+    payload: MemorySuggestionRequest,
+    store: MemoryStore = Depends(get_memory_store),
+) -> MemorySuggestionResponse:
+    suggestions = store.suggest_memories(payload.query, limit=payload.limit)
+    wrapped = [MemorySuggestion(memory=suggestion, score=suggestion.score) for suggestion in suggestions]
+    return MemorySuggestionResponse(suggestions=wrapped)
+
+
 @api_router.get("/memories/export")
 async def export_memories(store: MemoryStore = Depends(get_memory_store)) -> dict:
     records = store.export_memories()
@@ -143,6 +162,46 @@ async def delete_memory(memory_id: str, store: MemoryStore = Depends(get_memory_
         raise HTTPException(status_code=404, detail="Memory not found")
 
 
+@api_router.get("/memories/deduplicate", response_model=DuplicateCheckResponse)
+async def deduplicate_memories(
+    threshold: float = Query(0.9, ge=0.0, le=1.0),
+    store: MemoryStore = Depends(get_memory_store),
+) -> DuplicateCheckResponse:
+    duplicates = store.find_duplicates(threshold=threshold)
+    return DuplicateCheckResponse(duplicates=duplicates)
+
+
+@api_router.post("/memories/consolidate", response_model=MemoryRecord)
+async def consolidate_memories(
+    payload: ConsolidateRequest,
+    store: MemoryStore = Depends(get_memory_store),
+) -> MemoryRecord:
+    if not payload.memory_ids:
+        raise HTTPException(status_code=400, detail="Provide at least one memory id.")
+    if not payload.summary.strip():
+        raise HTTPException(status_code=400, detail="Summary text required.")
+    return store.consolidate_memories(
+        payload.memory_ids,
+        payload.summary,
+        delete_originals=payload.delete_originals,
+        title=payload.title,
+        tags=payload.tags,
+    )
+
+
+@api_router.post("/memories/contradictions", response_model=ContradictionResponse)
+async def detect_contradictions(
+    payload: ContradictionRequest,
+    router: LLMRouter = Depends(get_llm_router),
+    store: MemoryStore = Depends(get_memory_store),
+) -> ContradictionResponse:
+    memories = store.get_memories_by_ids(payload.memory_ids)
+    if not memories:
+        raise HTTPException(status_code=400, detail="No memories found for supplied IDs.")
+    report = await router.analyze_memories(memories, mode="contradiction", model=payload.model)
+    return ContradictionResponse(report=report)
+
+
 @api_router.post("/chat", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
@@ -160,6 +219,32 @@ async def chat(
         placeholder=result.get("placeholder", False),
         stats=result.get("stats"),
     )
+
+
+@api_router.post("/chat/summarize", response_model=SummarizeResponse)
+async def summarize_conversation(
+    request: SummarizeRequest,
+    router: LLMRouter = Depends(get_llm_router),
+    store: MemoryStore = Depends(get_memory_store),
+) -> SummarizeResponse:
+    result = await router.summarize(
+        [message.model_dump() for message in request.messages],
+        mode=request.mode,
+        model=request.model,
+        max_tokens=request.max_tokens,
+    )
+    memory_id = None
+    if request.persist:
+        record = store.add_memory(
+            MemoryCreate(
+                title=request.title or "Summary",
+                content=result["summary"],
+                tags=request.tags or ["#summary"],
+            ),
+            source="summary",
+        )
+        memory_id = record.id
+    return SummarizeResponse(summary=result["summary"], model=result["model"], memory_id=memory_id)
 
 
 @api_router.post("/chat/stream")

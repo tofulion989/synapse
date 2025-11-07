@@ -32,6 +32,8 @@ function App() {
     loading,
     error,
     stats,
+    suggestions,
+    duplicates,
     refreshModels,
     refreshMemories,
     refreshTags,
@@ -42,6 +44,11 @@ function App() {
     importMemoryBatch,
     setError,
     setStats,
+    fetchSuggestions,
+    summarizeChat,
+    getDuplicates,
+    mergeMemories,
+    analyzeContradictions,
   } = useSynapseApi()
 
   const [selectedMemoryIds, setSelectedMemoryIds] = useState(prefs.memoryIds || [])
@@ -53,6 +60,8 @@ function App() {
   const [showSystemPrompt, setShowSystemPrompt] = useState(prefs.showSystemPrompt ?? false)
   const [showStatsDetails, setShowStatsDetails] = useState(prefs.showStatsDetails ?? false)
   const [statusMessage, setStatusMessage] = useState(null)
+  const [summaryResult, setSummaryResult] = useState(null)
+  const [contradictionReport, setContradictionReport] = useState(null)
   const controllerRef = useRef(null)
 
   useEffect(() => {
@@ -81,11 +90,30 @@ function App() {
     return () => clearTimeout(timeout)
   }, [searchQuery, activeTags, refreshMemories])
 
+  const latestUserMessage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i]?.role === 'user') return messages[i]
+    }
+    return null
+  }, [messages])
+
+  useEffect(() => {
+    if (!latestUserMessage?.content?.trim()) {
+      fetchSuggestions({ query: '' })
+      return
+    }
+    fetchSuggestions({ query: latestUserMessage.content, limit: 5 })
+  }, [latestUserMessage?.id, latestUserMessage?.content, fetchSuggestions])
+
   useEffect(() => {
     setSelectedMemoryIds((previous) =>
       previous.filter((id) => memories.some((memory) => memory.id === id)),
     )
   }, [memories])
+
+  useEffect(() => {
+    setContradictionReport(null)
+  }, [selectedMemoryIds])
 
   useEffect(() => {
     setActiveTags((previous) =>
@@ -276,6 +304,12 @@ function App() {
     }
   }
 
+  const handleApproveSuggestion = (memoryId) => {
+    setSelectedMemoryIds((prev) =>
+      prev.includes(memoryId) ? prev : [memoryId, ...prev],
+    )
+  }
+
   const handleToggleTag = (tag) => {
     setActiveTags((prev) =>
       prev.includes(tag) ? prev.filter((entry) => entry !== tag) : [...prev, tag],
@@ -321,6 +355,67 @@ function App() {
     }
   }
 
+  const handleSummarize = async (mode, persist = false) => {
+    if (!messages.length) {
+      setStatusMessage('Add at least one message before summarizing.')
+      return
+    }
+    try {
+      const response = await summarizeChat({
+        messages: messages.map(({ role, content }) => ({ role, content })),
+        mode,
+        persist,
+        title: mode === 'compression' ? 'Compressed Conversation' : 'Conversation Summary',
+        tags: ['#summary', mode === 'compression' ? '#compression' : '#synthesis'],
+      })
+      setSummaryResult(response.summary)
+      if (response.memory_id) {
+        setSelectedMemoryIds((prev) => [response.memory_id, ...prev])
+      }
+      setStatusMessage('Summary generated.')
+    } catch (err) {
+      setError(err.message || 'Failed to summarize conversation.')
+    }
+  }
+
+  const handleCheckDuplicates = async () => {
+    try {
+      await getDuplicates()
+    } catch (err) {
+      setError(err.message || 'Failed to check duplicates.')
+    }
+  }
+
+  const handleMergeDuplicates = async (ids) => {
+    if (!ids?.length) return
+    const summary = window.prompt('Provide a consolidated summary for these memories:')
+    if (!summary?.trim()) return
+    const deleteOriginals = window.confirm('Delete the original memories after consolidation?')
+    try {
+      await mergeMemories({
+        memory_ids: ids,
+        summary,
+        delete_originals: deleteOriginals,
+      })
+      setStatusMessage('Memories consolidated.')
+    } catch (err) {
+      setError(err.message || 'Failed to consolidate memories.')
+    }
+  }
+
+  const handleContradictionCheck = async () => {
+    if (selectedMemoryIds.length < 2) {
+      setStatusMessage('Select at least two memories to analyze contradictions.')
+      return
+    }
+    try {
+      const response = await analyzeContradictions({ memory_ids: selectedMemoryIds })
+      setContradictionReport(response.report)
+    } catch (err) {
+      setError(err.message || 'Failed to analyze contradictions.')
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
@@ -338,6 +433,7 @@ function App() {
           selectedIds={selectedMemoryIds}
           tags={tags}
           activeTags={activeTags}
+          suggestions={suggestions}
           searchQuery={searchQuery}
           onSearch={setSearchQuery}
           onToggleMemory={(memoryId) =>
@@ -353,6 +449,12 @@ function App() {
           onClearTags={() => setActiveTags([])}
           onExport={handleExportMemories}
           onImport={handleImportMemories}
+          onApproveSuggestion={handleApproveSuggestion}
+          onCheckDuplicates={handleCheckDuplicates}
+          duplicateGroups={duplicates}
+          onMergeDuplicates={handleMergeDuplicates}
+          onCheckContradictions={handleContradictionCheck}
+          contradictionReport={contradictionReport}
           loading={loading.memories}
         />
       </aside>
@@ -383,6 +485,8 @@ function App() {
           activeModel={activeModel}
           showStatsDetails={showStatsDetails}
           onToggleStats={() => setShowStatsDetails((prev) => !prev)}
+          onSummarize={handleSummarize}
+          summaryResult={summaryResult}
         />
       </main>
     </div>

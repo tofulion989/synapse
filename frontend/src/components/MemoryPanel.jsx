@@ -9,6 +9,9 @@ export default function MemoryPanel({
   selectedIds,
   tags,
   activeTags,
+  suggestions,
+  duplicateGroups,
+  contradictionReport,
   onToggleMemory,
   onRefresh,
   onCreateMemory,
@@ -17,6 +20,10 @@ export default function MemoryPanel({
   onClearTags,
   onExport,
   onImport,
+  onApproveSuggestion,
+  onCheckDuplicates,
+  onMergeDuplicates,
+  onCheckContradictions,
   searchQuery,
   loading,
 }) {
@@ -109,6 +116,32 @@ export default function MemoryPanel({
         />
       </div>
 
+      {suggestions?.length > 0 && (
+        <div className="suggestions-panel">
+          <div className="tag-filter-header">
+            <span>Suggested Memories</span>
+          </div>
+          <div className="suggestion-list">
+            {suggestions.map(({ memory, score }) => (
+              <div key={memory.id} className="suggestion-item">
+                <div>
+                  <strong>{memory.title || memory.id.slice(0, 8)}</strong>
+                  <p>{memory.content}</p>
+                  <small>Score: {score ? score.toFixed(2) : 'n/a'}</small>
+                </div>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => onApproveSuggestion?.(memory.id)}
+                >
+                  Add
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {tags.length > 0 && (
         <div className="memory-tag-filters">
           <div className="tag-filter-header">
@@ -163,6 +196,36 @@ export default function MemoryPanel({
           ))}
       </div>
 
+      <div className="intelligence-panel">
+        <h3>Intelligence</h3>
+        <div className="intelligence-actions">
+          <button type="button" className="text-button" onClick={onCheckDuplicates}>
+            Find duplicates
+          </button>
+          <button type="button" className="text-button" onClick={onCheckContradictions}>
+            Check contradictions
+          </button>
+        </div>
+        {duplicateGroups?.length > 0 && (
+          <div className="duplicate-list">
+            {duplicateGroups.map((group, index) => (
+              <div key={`${group.join('-')}-${index}`} className="duplicate-row">
+                <span>{group.join(' + ')}</span>
+                <button type="button" className="text-button" onClick={() => onMergeDuplicates?.(group)}>
+                  Merge
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {contradictionReport && (
+          <div className="contradiction-report">
+            <strong>Contradictions</strong>
+            <p>{contradictionReport}</p>
+          </div>
+        )}
+      </div>
+
       <form className="memory-form" onSubmit={handleSubmit}>
         <h3>Add Memory</h3>
         <input
@@ -211,6 +274,17 @@ MemoryPanel.propTypes = {
     }),
   ),
   activeTags: PropTypes.arrayOf(PropTypes.string),
+  suggestions: PropTypes.arrayOf(
+    PropTypes.shape({
+      memory: PropTypes.shape({
+        id: PropTypes.string.isRequired,
+        content: PropTypes.string.isRequired,
+      }),
+      score: PropTypes.number,
+    }),
+  ),
+  duplicateGroups: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.string)),
+  contradictionReport: PropTypes.string,
   onToggleMemory: PropTypes.func,
   onRefresh: PropTypes.func,
   onCreateMemory: PropTypes.func,
@@ -219,6 +293,10 @@ MemoryPanel.propTypes = {
   onClearTags: PropTypes.func,
   onExport: PropTypes.func,
   onImport: PropTypes.func,
+  onApproveSuggestion: PropTypes.func,
+  onCheckDuplicates: PropTypes.func,
+  onMergeDuplicates: PropTypes.func,
+  onCheckContradictions: PropTypes.func,
   searchQuery: PropTypes.string,
   loading: PropTypes.bool,
 }
@@ -228,6 +306,9 @@ MemoryPanel.defaultProps = {
   selectedIds: [],
   tags: [],
   activeTags: [],
+  suggestions: [],
+  duplicateGroups: [],
+  contradictionReport: '',
   searchQuery: '',
   loading: false,
 }

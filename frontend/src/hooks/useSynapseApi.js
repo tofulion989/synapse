@@ -3,13 +3,18 @@ import { useCallback, useState } from 'react'
 import {
   chatWithModel,
   chatWithModelStream,
+  consolidateMemories,
   createMemory,
   deleteMemory,
+  detectContradictions,
   exportMemories,
+  fetchDuplicates,
   importMemories,
   listMemories,
   listModels,
   listTags,
+  summarizeConversation,
+  suggestMemories,
 } from '../lib/api'
 
 const initialLoading = {
@@ -28,6 +33,8 @@ export function useSynapseApi() {
   const [loading, setLoading] = useState(initialLoading)
   const [stats, setStats] = useState(null)
   const [error, setError] = useState(null)
+  const [suggestions, setSuggestions] = useState([])
+  const [duplicates, setDuplicates] = useState([])
 
   const withLoading = useCallback((key, fn) => {
     return async (...args) => {
@@ -174,6 +181,48 @@ export function useSynapseApi() {
     [withLoading, refreshMemories, refreshTags],
   )
 
+  const fetchSuggestions = useCallback(
+    withLoading('memories', async ({ query, limit = 5 }) => {
+      if (!query?.trim()) {
+        setSuggestions([])
+        return []
+      }
+      const response = await suggestMemories({ query, limit })
+      const result = response?.suggestions || []
+      setSuggestions(result)
+      return result
+    }),
+    [withLoading],
+  )
+
+  const summarizeChat = useCallback(
+    withLoading('chat', async (payload) => summarizeConversation(payload)),
+    [withLoading],
+  )
+
+  const getDuplicates = useCallback(
+    withLoading('memories', async (threshold) => {
+      const response = await fetchDuplicates(threshold)
+      setDuplicates(response?.duplicates || [])
+      return response
+    }),
+    [withLoading],
+  )
+
+  const mergeMemories = useCallback(
+    withLoading('memories', async (payload) => {
+      const response = await consolidateMemories(payload)
+      await refreshMemories()
+      return response
+    }),
+    [withLoading, refreshMemories],
+  )
+
+  const analyzeContradictions = useCallback(
+    withLoading('memories', async (payload) => detectContradictions(payload)),
+    [withLoading],
+  )
+
   return {
     models,
     memories,
@@ -181,6 +230,8 @@ export function useSynapseApi() {
     loading,
     error,
     stats,
+    suggestions,
+    duplicates,
     refreshModels,
     refreshMemories,
     refreshTags,
@@ -192,5 +243,10 @@ export function useSynapseApi() {
     importMemoryBatch,
     setError,
     setStats,
+    fetchSuggestions,
+    summarizeChat,
+    getDuplicates,
+    mergeMemories,
+    analyzeContradictions,
   }
 }

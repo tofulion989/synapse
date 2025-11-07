@@ -65,10 +65,15 @@ class MemoryStore:
                     content TEXT NOT NULL,
                     tags TEXT,
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    source TEXT DEFAULT 'user'
                 )
                 """
             )
+            try:
+                cur.execute("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'user'")
+            except sqlite3.OperationalError:
+                pass
 
     @contextmanager
     def _transaction(self):
@@ -85,7 +90,7 @@ class MemoryStore:
 
     # ------------------------------------------------------------------ public API
 
-    def add_memory(self, payload: MemoryCreate) -> MemoryRecord:
+    def add_memory(self, payload: MemoryCreate, *, source: str = "user") -> MemoryRecord:
         memory_id = uuid4().hex
         now = _timestamp()
         tags_serialised = _serialise_tags(payload.tags)
@@ -93,10 +98,10 @@ class MemoryStore:
         with self._transaction() as cur:
             cur.execute(
                 """
-                INSERT INTO memories (id, title, content, tags, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO memories (id, title, content, tags, created_at, updated_at, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (memory_id, payload.title, payload.content, tags_serialised, now, now),
+                (memory_id, payload.title, payload.content, tags_serialised, now, now, source),
             )
 
         self._upsert_vector(memory_id, payload, metadata={"tags": tags_serialised})
@@ -108,9 +113,10 @@ class MemoryStore:
             tags=_deserialise_tags(tags_serialised),
             created_at=datetime.fromisoformat(now),
             updated_at=datetime.fromisoformat(now),
+            source=source,
         )
 
-    def upsert_memory(self, record: MemoryImportRecord) -> MemoryRecord:
+    def upsert_memory(self, record: MemoryImportRecord, *, source: str = "user") -> MemoryRecord:
         memory_id = record.id or uuid4().hex
         created_at = record.created_at.isoformat() if isinstance(record.created_at, datetime) else record.created_at
         updated_at = record.updated_at.isoformat() if isinstance(record.updated_at, datetime) else record.updated_at
@@ -123,15 +129,16 @@ class MemoryStore:
         with self._transaction() as cur:
             cur.execute(
                 """
-                INSERT INTO memories (id, title, content, tags, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO memories (id, title, content, tags, created_at, updated_at, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     title=excluded.title,
                     content=excluded.content,
                     tags=excluded.tags,
-                    updated_at=excluded.updated_at
+                    updated_at=excluded.updated_at,
+                    source=excluded.source
                 """,
-                (memory_id, record.title, record.content, tags_serialised, created, updated),
+                (memory_id, record.title, record.content, tags_serialised, created, updated, source),
             )
 
         self._upsert_vector(
@@ -147,6 +154,7 @@ class MemoryStore:
             tags=_deserialise_tags(tags_serialised),
             created_at=datetime.fromisoformat(created),
             updated_at=datetime.fromisoformat(updated),
+            source=source,
         )
 
     def export_memories(self) -> List[MemoryRecord]:
@@ -155,7 +163,7 @@ class MemoryStore:
     def import_memories(self, records: List[MemoryImportRecord]) -> List[MemoryRecord]:
         imported: List[MemoryRecord] = []
         for record in records:
-            imported.append(self.upsert_memory(record))
+            imported.append(self.upsert_memory(record, source=record.source or "user"))
         return imported
 
     def get_memory(self, memory_id: str) -> Optional[MemoryRecord]:
@@ -267,6 +275,50 @@ class MemoryStore:
             rows = cur.fetchall()
         return [self._row_to_record(row) for row in rows]
 
+    def suggest_memories(self, query: str, limit: int = 5) -> List[MemoryRecord]:
+        return self.search_memories(query=query, limit=limit)
+
+    def consolidate_memories(
+        self,
+        memory_ids: List[str],
+        summary: str,
+        delete_originals: bool = False,
+        title: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> MemoryRecord:
+        record = self.add_memory(
+            MemoryCreate(title=title or "Summary", content=summary, tags=tags or ["#summary"]),
+            source="summary",
+        )
+        if delete_originals and memory_ids:
+            self.delete_memories(memory_ids)
+        return record
+
+    def delete_memories(self, memory_ids: List[str]) -> None:
+        if not memory_ids:
+            return
+        placeholders = ",".join("?" for _ in memory_ids)
+        with self._transaction() as cur:
+            cur.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", memory_ids)
+
+    def find_duplicates(self, threshold: float = 0.9) -> List[List[str]]:
+        memories = self.list_memories(limit=500)
+        embeddings = {memory.id: self._cheap_embedding(memory.content) for memory in memories}
+        duplicates = []
+        seen_pairs = set()
+
+        for i, mem_a in enumerate(memories):
+            emb_a = embeddings[mem_a.id]
+            for mem_b in memories[i + 1 :]:
+                pair = tuple(sorted((mem_a.id, mem_b.id)))
+                if pair in seen_pairs:
+                    continue
+                score = self._cosine_similarity(emb_a, embeddings[mem_b.id])
+                if score >= threshold:
+                    duplicates.append(list(pair))
+                    seen_pairs.add(pair)
+        return duplicates
+
     # ------------------------------------------------------------------ helpers
 
     def _row_to_record(self, row: sqlite3.Row) -> MemoryRecord:
@@ -277,6 +329,7 @@ class MemoryStore:
             tags=_deserialise_tags(row["tags"]),
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
+            source=row["source"] if "source" in row.keys() else "user",
         )
         if "score" in row.keys():
             try:
@@ -320,3 +373,8 @@ class MemoryStore:
             vector[index] += 1.0
         length = sum(value * value for value in vector) ** 0.5 or 1.0
         return [value / length for value in vector]
+
+    def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
+        return sum(x * y for x, y in zip(a, b)) / (
+            (sum(x * x for x in a) ** 0.5 or 1.0) * (sum(y * y for y in b) ** 0.5 or 1.0)
+        )

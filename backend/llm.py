@@ -6,7 +6,7 @@ from typing import Any, Dict, Mapping, Sequence, Union, List, Optional
 from litellm import completion, model_cost, token_counter
 
 from .config import Settings, get_settings
-from .models import ChatMessage, ModelInfo
+from .models import ChatMessage, MemoryRecord, ModelInfo
 
 
 class LLMRouter:
@@ -65,10 +65,9 @@ class LLMRouter:
         elif self.settings.litellm_api_base:
             payload["api_base"] = self.settings.litellm_api_base
 
-        loop = asyncio.get_running_loop()
         try:
-            response = await loop.run_in_executor(None, lambda: completion(**payload))
-        except Exception as exc:  # pragma: no cover - explicit runtime feedback for operators.
+            response = await self._complete(payload)
+        except Exception as exc:  # pragma: no cover
             return self._placeholder_payload(normalised, model_name, exc, stats)
 
         choice = response["choices"][0] if isinstance(response, dict) else response.choices[0]
@@ -83,11 +82,9 @@ class LLMRouter:
             "stats": stats,
         }
 
-        usage = None
-        if isinstance(response, dict):
+        usage = getattr(response, "usage", None) if hasattr(response, "usage") else None
+        if usage is None and isinstance(response, dict):
             usage = response.get("usage")
-        elif hasattr(response, "usage"):
-            usage = getattr(response, "usage")
         if usage and isinstance(usage, dict):
             prompt_tokens = usage.get("prompt_tokens") or usage.get("total_tokens")
             if prompt_tokens:
@@ -122,6 +119,74 @@ class LLMRouter:
             "placeholder": placeholder,
             "stats": stats,
         }
+
+    async def summarize(
+        self,
+        messages: Sequence[Mapping[str, Any]],
+        mode: str = "summary",
+        model: Optional[str] = None,
+        max_tokens: int = 512,
+    ) -> Dict[str, str]:
+        summary_model = model or self.settings.summary_model
+        instructions = (
+            "You are a careful note taker. Provide a crisp summary that captures facts, decisions, "
+            "and follow-ups. Avoid embellishing."
+            if mode == "summary"
+            else "Compress the conversation to essential bullet points while preserving key instructions."
+        )
+        payload = {
+            "model": summary_model,
+            "messages": [
+                {"role": "system", "content": instructions},
+                {
+                    "role": "user",
+                    "content": "\n\n".join(f"{msg['role']}: {msg['content']}" for msg in messages),
+                },
+            ],
+            "max_tokens": max_tokens,
+        }
+        response = await self._complete(payload)
+        choice = response["choices"][0] if isinstance(response, dict) else response.choices[0]
+        message = choice["message"] if isinstance(choice, dict) else choice.message
+        content = message["content"] if isinstance(message, dict) else message.content
+        return {"summary": content.strip(), "model": summary_model}
+
+    async def analyze_memories(
+        self,
+        memories: Sequence[MemoryRecord],
+        mode: str,
+        model: Optional[str] = None,
+    ) -> str:
+        analysis_model = model or self.settings.analysis_model
+        if not memories:
+            return "No memories supplied."
+
+        prompt_lines = []
+        for memory in memories:
+            prompt_lines.append(f"- ({memory.id}) {memory.content}")
+
+        if mode == "contradiction":
+            instruction = (
+                "Identify any statements that contradict each other. Report the conflicting IDs and details."
+            )
+        else:
+            instruction = "List possible duplicates or highly similar entries with their IDs."
+
+        payload = {
+            "model": analysis_model,
+            "messages": [
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": "\n".join(prompt_lines)},
+            ],
+        }
+        response = await self._complete(payload)
+        choice = response["choices"][0] if isinstance(response, dict) else response.choices[0]
+        message = choice["message"] if isinstance(choice, dict) else choice.message
+        return (message["content"] if isinstance(message, dict) else message.content).strip()
+
+    async def _complete(self, payload: Dict[str, Any]):
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: completion(**payload))
 
     def _provider_from_model(self, model: str) -> str:
         if "/" in model:

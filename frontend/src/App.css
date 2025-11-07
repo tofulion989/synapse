@@ -121,6 +121,65 @@
   margin-bottom: 1rem;
 }
 
+.suggestions-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  background: #f8fafc;
+}
+
+.suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.suggestion-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 1px dashed #cbd5f5;
+  padding: 0.5rem;
+  border-radius: 8px;
+}
+
+.intelligence-panel {
+  margin-bottom: 1rem;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 0.75rem;
+}
+
+.intelligence-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.duplicate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.duplicate-row {
+  display: flex;
+  justify-content: space-between;
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.contradiction-report {
+  margin-top: 0.75rem;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  padding: 0.6rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
 .tag-filter-header {
   display: flex;
   justify-content: space-between;
@@ -309,6 +368,28 @@
   font-size: 0.8rem;
   color: #4b5563;
   margin-bottom: 0.75rem;
+}
+
+.summary-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.summary-card {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.summary-card .summary-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #0369a1;
+  margin-bottom: 0.3rem;
 }
 
 .chat-body {

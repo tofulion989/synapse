@@ -62,6 +62,7 @@ class MemoryRecord(MemoryCreate):
     created_at: datetime
     updated_at: datetime
     score: Optional[float] = Field(None, description="Optional similarity score when returned from search.")
+    source: Optional[str] = Field("user", description="Origin of the memory (user, summary, etc.).")
 
 
 class MemoryImportRecord(BaseModel):
@@ -71,6 +72,7 @@ class MemoryImportRecord(BaseModel):
     tags: List[str] = Field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    source: Optional[str] = None
 
 
 class MemoryImportRequest(BaseModel):
@@ -88,6 +90,57 @@ class UsageStats(BaseModel):
     token_count: int
     model_limit: Optional[int] = None
     percent_used: Optional[float] = None
+
+
+class MemorySuggestionRequest(BaseModel):
+    query: str = Field(..., description="Free text used to suggest relevant memories.")
+    limit: int = Field(5, ge=1, le=20)
+
+
+class MemorySuggestion(BaseModel):
+    memory: MemoryRecord
+    score: Optional[float]
+
+
+class MemorySuggestionResponse(BaseModel):
+    suggestions: List[MemorySuggestion]
+
+
+class SummarizeRequest(BaseModel):
+    messages: List[ChatMessage]
+    max_tokens: int = Field(512, ge=64, le=4096)
+    model: Optional[str] = None
+    mode: str = Field("summary", description="summary|compression")
+    persist: bool = False
+    title: Optional[str] = None
+    tags: List[str] = Field(default_factory=lambda: ["#summary"])
+
+
+class SummarizeResponse(BaseModel):
+    summary: str
+    model: str
+    memory_id: Optional[str] = None
+
+
+class ConsolidateRequest(BaseModel):
+    memory_ids: List[str]
+    summary: str
+    title: Optional[str] = None
+    tags: List[str] = Field(default_factory=lambda: ["#summary"])
+    delete_originals: bool = False
+
+
+class DuplicateCheckResponse(BaseModel):
+    duplicates: List[List[str]] = Field(default_factory=list)
+
+
+class ContradictionRequest(BaseModel):
+    memory_ids: List[str]
+    model: Optional[str] = None
+
+
+class ContradictionResponse(BaseModel):
+    report: str
 
 
 ChatResponse.model_rebuild()

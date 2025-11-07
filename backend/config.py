@@ -62,6 +62,8 @@ class Settings:
     ollama_model: str = field(init=False)
     provider_keys: Dict[str, str] = field(init=False)
     provider_api_bases: Dict[str, str] = field(init=False)
+    summary_model: str = field(init=False)
+    analysis_model: str = field(init=False)
 
     def __post_init__(self) -> None:
         _load_env_file()
@@ -113,6 +115,9 @@ class Settings:
             if value:
                 self.provider_api_bases[provider] = value
                 os.environ[env_var] = value
+
+        self.summary_model = os.getenv("SUMMARY_MODEL", "openai/gpt-4o")
+        self.analysis_model = os.getenv("ANALYSIS_MODEL", self.summary_model)
 
         self.allowed_models = self._derive_allowed_models(allowed_raw)
 

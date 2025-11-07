@@ -30,6 +30,8 @@ export default function ChatPanel({
   activeModel,
   showStatsDetails,
   onToggleStats,
+  onSummarize,
+  summaryResult,
 }) {
   const [draft, setDraft] = useState('')
   const endRef = useRef(null)
@@ -146,6 +148,23 @@ export default function ChatPanel({
           Includes the system prompt, manually selected memories, and recent chat history.
         </div>
       )}
+      <div className="summary-actions">
+        <button type="button" className="text-button" onClick={() => onSummarize?.('summary', false)}>
+          Summarize
+        </button>
+        <button type="button" className="text-button" onClick={() => onSummarize?.('compression', false)}>
+          Compress
+        </button>
+        <button type="button" className="text-button" onClick={() => onSummarize?.('summary', true)}>
+          Summarize & Save
+        </button>
+      </div>
+      {summaryResult && (
+        <div className="summary-card">
+          <div className="summary-label">Latest summary</div>
+          <p>{summaryResult}</p>
+        </div>
+      )}
 
       <div className="chat-body">
         <div className="chat-stream">
@@ -241,6 +260,8 @@ ChatPanel.propTypes = {
   activeModel: PropTypes.string,
   showStatsDetails: PropTypes.bool,
   onToggleStats: PropTypes.func,
+  onSummarize: PropTypes.func,
+  summaryResult: PropTypes.string,
 }
 
 ChatPanel.defaultProps = {
@@ -252,4 +273,5 @@ ChatPanel.defaultProps = {
   usageStats: null,
   activeModel: '',
   showStatsDetails: false,
+  summaryResult: '',
 }
