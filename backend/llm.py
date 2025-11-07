@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict, Mapping, Sequence, Union, List, Optional, Tuple
 
+import logging
+import time
+
 import requests
 from litellm import completion, model_cost, token_counter
 
@@ -17,7 +20,7 @@ class LLMRouter:
         self.settings = settings or get_settings()
         self.ollama_online = False
         self.ollama_tags: List[str] = []
-        self._probe_ollama()
+        self._probe_ollama(initial=True)
 
     @property
     def models(self) -> List[ModelInfo]:
@@ -334,21 +337,28 @@ class LLMRouter:
             return None
         return round((token_count / model_limit) * 100, 1)
 
-    def _probe_ollama(self) -> None:
+    def _probe_ollama(self, initial: bool = False) -> None:
         base_url = self.settings.ollama_base_url.rstrip("/")
         tags_endpoint = f"{base_url}/api/tags"
-        try:
-            response = requests.get(tags_endpoint, timeout=2)
-            response.raise_for_status()
-            data = response.json()
-            models = data.get("models", [])
-            parsed = []
-            for model in models:
-                name = model.get("name") or model.get("tag")
-                if name:
-                    parsed.append(name)
-            self.ollama_tags = parsed
-            self.ollama_online = True
-        except Exception:
-            self.ollama_tags = []
-            self.ollama_online = False
+        attempts = 2 if initial else 1
+        for attempt in range(attempts):
+            try:
+                response = requests.get(tags_endpoint, timeout=2)
+                response.raise_for_status()
+                data = response.json()
+                models = data.get("models", [])
+                parsed = []
+                for model in models:
+                    name = model.get("name") or model.get("tag")
+                    if name:
+                        parsed.append(name)
+                self.ollama_tags = parsed
+                self.ollama_online = True
+                logging.info("Ollama models discovered: %s", parsed or ["<none>"])
+                return
+            except Exception as exc:
+                logging.warning("Ollama ping failed (%s). Attempt %s/%s", exc, attempt + 1, attempts)
+                self.ollama_tags = []
+                self.ollama_online = False
+                if attempt + 1 < attempts:
+                    time.sleep(3)
