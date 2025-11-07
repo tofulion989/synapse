@@ -1,0 +1,18 @@
+# venv & caches
+.venv/
+__pycache__/
+*.pyc
+
+# node
+frontend/node_modules/
+frontend/dist/
+
+# local data
+data/vector_store/
+data/conversations/
+data/synapse.db
+
+# env & OS junk
+.env
+*.log
+.DS_Store
