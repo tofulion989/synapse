@@ -26,6 +26,7 @@ class LLMRouter:
         self.settings = settings or get_settings()
         self.ollama_online = False
         self.ollama_tags: List[str] = []
+        self.ollama_status = "unknown"
         self._probe_ollama(initial=True)
 
     @property
@@ -59,10 +60,14 @@ class LLMRouter:
             model.cost_per_1k = cost
             all_models.append(model)
 
+        provider_status_entries.append(
+            ProviderStatus(provider="ollama", status=self.ollama_status)
+        )
+
         return ModelListResponse(
             models=all_models,
             provider_status=provider_status_entries,
-            ollama_status="ok" if self.ollama_online else "offline",
+            ollama_status=self.ollama_status,
         )
 
     async def chat(
@@ -334,12 +339,17 @@ class LLMRouter:
         return None
 
     def _probe_ollama(self, initial: bool = False) -> None:
-        base_url = self.settings.ollama_base_url.rstrip("/")
-        tags_endpoint = f"{base_url}/api/tags"
-        attempts = 2 if initial else 1
+        endpoints = [self.settings.ollama_base_url.rstrip("/"), "http://127.0.0.1:11434"]
+        attempts = len(endpoints) if initial else 1
+        self.ollama_online = False
+        self.ollama_status = "unreachable"
+        self.ollama_tags = []
+
         for attempt in range(attempts):
+            endpoint = endpoints[min(attempt, len(endpoints) - 1)]
+            tags_endpoint = f"{endpoint}/api/tags"
             try:
-                response = requests.get(tags_endpoint, timeout=2)
+                response = requests.get(tags_endpoint, timeout=3)
                 response.raise_for_status()
                 data = response.json()
                 models = data.get("models", [])
@@ -350,14 +360,14 @@ class LLMRouter:
                         parsed.append(name)
                 self.ollama_tags = parsed
                 self.ollama_online = True
+                self.ollama_status = "ok"
                 logging.info("Ollama models discovered: %s", parsed or ["<none>"])
                 return
             except Exception as exc:
-                logging.warning("Ollama ping failed (%s). Attempt %s/%s", exc, attempt + 1, attempts)
-                self.ollama_tags = []
-                self.ollama_online = False
-                if attempt + 1 < attempts:
-                    time.sleep(3)
+                logging.warning("Ollama unreachable (%s). Attempt %s/%s", exc, attempt + 1, attempts)
+                time.sleep(1)
+        self.ollama_online = False
+        self.ollama_status = "unreachable"
     def _cloud_models_for(self, provider: str) -> Tuple[str, List[ModelMetadata]]:
         key = self.settings.provider_keys.get(provider)
         if not key:

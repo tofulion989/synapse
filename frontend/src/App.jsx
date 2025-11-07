@@ -27,6 +27,8 @@ function App() {
 
   const {
     models,
+    providerStatus,
+    ollamaStatus,
     memories,
     tags,
     loading,
@@ -49,7 +51,6 @@ function App() {
     getDuplicates,
     mergeMemories,
     analyzeContradictions,
-    providerStatus,
   } = useSynapseApi()
 
   const [selectedMemoryIds, setSelectedMemoryIds] = useState(prefs.memoryIds || [])
@@ -429,6 +430,7 @@ function App() {
         <ModelSelector
           models={models}
           providerStatus={providerStatus}
+          ollamaStatus={ollamaStatus}
           activeModel={activeModel}
           onSelect={(model) => {
             setActiveModel(model)
@@ -436,6 +438,7 @@ function App() {
           }}
           disabled={loading.chat}
           onOpenSettings={handleOpenSettings}
+          onRetry={refreshModels}
         />
         <MemoryPanel
           memories={memories}

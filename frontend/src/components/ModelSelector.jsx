@@ -9,7 +9,9 @@ export default function ModelSelector({
   onSelect,
   disabled,
   providerStatus,
+  ollamaStatus,
   onOpenSettings,
+  onRetry,
 }) {
   const validModels = useMemo(
     () =>
@@ -116,6 +118,14 @@ export default function ModelSelector({
             )}
           </div>
         ))}
+        {ollamaStatus !== 'ok' && (
+          <div className="provider-warning">
+            ⚠️ Ollama unreachable — local models hidden.
+            <button type="button" className="text-button" onClick={onRetry}>
+              Retry
+            </button>
+          </div>
+        )}
         {providerWarnings.length > 0 && (
           <div className="provider-warnings">
             {providerWarnings.map(({ provider, status, message }) => (
@@ -156,7 +166,9 @@ ModelSelector.propTypes = {
       message: PropTypes.string,
     }),
   ),
+  ollamaStatus: PropTypes.string,
   onOpenSettings: PropTypes.func,
+  onRetry: PropTypes.func,
 }
 
 ModelSelector.defaultProps = {
@@ -164,5 +176,7 @@ ModelSelector.defaultProps = {
   activeModel: '',
   disabled: false,
   providerStatus: [],
+  ollamaStatus: 'unknown',
   onOpenSettings: undefined,
+  onRetry: undefined,
 }
