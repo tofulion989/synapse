@@ -26,10 +26,27 @@ export default function ChatPanel({
 }) {
   const [draft, setDraft] = useState('')
   const endRef = useRef(null)
+  const textareaRef = useRef(null)
+  const MAX_LINES = 6
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    textarea.style.height = 'auto'
+    const lineHeight =
+      typeof window !== 'undefined'
+        ? parseFloat(window.getComputedStyle(textarea).lineHeight) || 20
+        : 20
+    const maxHeight = lineHeight * MAX_LINES
+    const newHeight = Math.min(textarea.scrollHeight, maxHeight)
+    textarea.style.height = `${newHeight}px`
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [draft])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -93,6 +110,7 @@ export default function ChatPanel({
 
       <form className="chat-input" onSubmit={handleSubmit}>
         <textarea
+          ref={textareaRef}
           placeholder="Ask Synapse…"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
