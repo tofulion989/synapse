@@ -22,6 +22,7 @@ export default function ChatPanel({
   isStreaming,
   tokenUsage,
   selectedMemories,
+  onSaveMemory,
 }) {
   const [draft, setDraft] = useState('')
   const endRef = useRef(null)
@@ -58,11 +59,19 @@ export default function ChatPanel({
       <div className="chat-body">
         <div className="chat-stream">
           {messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              role={message.role}
-              content={message.content}
-            />
+            <div key={message.id} className="chat-message-row">
+              <MessageBubble role={message.role} content={message.content} />
+              {message.role === 'assistant' && (
+                <button
+                  type="button"
+                  className="save-memory"
+                  onClick={() => onSaveMemory?.(message)}
+                  title="Save this response as memory"
+                >
+                  Save
+                </button>
+              )}
+            </div>
           ))}
           <div ref={endRef} />
         </div>
@@ -90,7 +99,7 @@ export default function ChatPanel({
           rows={3}
           disabled={isStreaming}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
               handleSubmit(event)
             }
@@ -128,6 +137,7 @@ ChatPanel.propTypes = {
       content: PropTypes.string.isRequired,
     }),
   ),
+  onSaveMemory: PropTypes.func,
 }
 
 ChatPanel.defaultProps = {

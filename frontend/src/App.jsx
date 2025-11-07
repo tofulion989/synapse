@@ -360,6 +360,13 @@ function App() {
           isStreaming={loading.chat}
           onStop={() => controllerRef.current?.abort()}
           selectedMemories={selectedMemories}
+          onSaveMemory={(message) =>
+            handleCreateMemory({
+              title: message.content.slice(0, 60),
+              content: message.content,
+              tags: ['#chat'],
+            })
+          }
           tokenUsage={null}
         />
       </main>
