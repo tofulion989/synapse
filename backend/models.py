@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, validator
 
@@ -82,11 +82,19 @@ class MemoryImportRequest(BaseModel):
 class ModelInfo(BaseModel):
     name: str
     provider: str
+    source: str = "cloud"
+    ctx: Optional[int] = None
+    available: bool = True
     description: Optional[str] = None
     default: bool = False
-    category: str = "cloud"
-    context_limit: Optional[int] = None
     cost_per_1k: Optional[float] = None
+    model_status: str = "ok"
+
+
+class ModelListResponse(BaseModel):
+    models: List[ModelInfo]
+    provider_status: Dict[str, str]
+    ollama_status: str
 
 
 class UsageStats(BaseModel):

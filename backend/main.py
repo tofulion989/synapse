@@ -104,9 +104,10 @@ async def ollama_status(router: LLMRouter = Depends(get_llm_router)) -> dict:
         "models": router.ollama_tags,
     }
 
-@api_router.get("/models", response_model=List[ModelInfo])
-async def list_models(router: LLMRouter = Depends(get_llm_router)) -> List[ModelInfo]:
-    return router.models
+@api_router.get("/models", response_model=ModelListResponse)
+async def list_models(router: LLMRouter = Depends(get_llm_router)) -> ModelListResponse:
+    payload = router.models
+    return ModelListResponse(**payload)
 
 
 @api_router.get("/memories", response_model=List[MemoryRecord])

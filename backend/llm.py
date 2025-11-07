@@ -23,60 +23,47 @@ class LLMRouter:
         self._probe_ollama(initial=True)
 
     @property
-    def models(self) -> List[ModelInfo]:
+    def models(self) -> Dict[str, Any]:
         self._probe_ollama()
-        infos: List[ModelInfo] = []
-        candidates = list(self.settings.allowed_models)
-        if self.ollama_online:
-            for tag in self.ollama_tags:
-                candidate = f"ollama/{tag}"
-                if candidate not in candidates:
-                    candidates.append(candidate)
+        local_models = [
+            ModelInfo(
+                name=f"ollama/{tag}",
+                provider="ollama",
+                default=False,
+                description=None,
+                source="local",
+                ctx=None,
+                cost_per_1k=None,
+            )
+            for tag in self.ollama_tags
+        ]
 
-        seen = set()
-        for name in candidates:
-            provider = self._provider_from_model(name)
-            description = None
-            if provider == "ollama" and not self.ollama_online:
-                description = "Ollama offline"
-            if name in seen:
+        cloud_models = []
+        provider_status = {}
+        for provider, key in self.settings.provider_keys.items():
+            status, models = self._cloud_models_for(provider)
+            provider_status[provider] = status
+            if status == "ok":
+                cloud_models.extend(models)
+            elif status == "no_key":
+                provider_status[provider] = "no_key"
+            else:
+                provider_status[provider] = "offline"
+
+        all_models: List[ModelInfo] = []
+        for model in local_models + cloud_models:
+            if not model.name:
                 continue
-            seen.add(name)
-            category = "local" if provider == "ollama" else "cloud"
-            context_limit = self._model_limit(name)
-            cost = self._model_cost(name)
-            infos.append(
-                ModelInfo(
-                    name=name,
-                    provider=provider,
-                    default=name == self.settings.default_model,
-                    description=description or f"{provider} model ({name})",
-                    category=category,
-                    context_limit=context_limit,
-                    cost_per_1k=cost,
-                )
-            )
+            model.ctx = self._model_limit(model.name)
+            model.cost_per_1k = self._model_cost(model.name)
+            model.available = True
+            all_models.append(model)
 
-        if self.ollama_online and not self.ollama_tags:
-            infos.append(
-                ModelInfo(
-                    name="ollama/—",
-                    provider="ollama",
-                    description="No local models installed",
-                    default=False,
-                )
-            )
-
-        if not self.ollama_online:
-            infos.append(
-                ModelInfo(
-                    name="ollama/offline",
-                    provider="ollama",
-                    description="Ollama offline",
-                    default=False,
-                )
-            )
-        return infos
+        return {
+            "models": all_models,
+            "provider_status": provider_status,
+            "ollama_status": "ok" if self.ollama_online else "offline",
+        }
 
     async def chat(
         self,
@@ -330,13 +317,7 @@ class LLMRouter:
                 return int(limit)
 
         provider = self._provider_from_model(model_name)
-        provider_defaults = {
-            "openai": 128000,
-            "anthropic": 200000,
-            "groq": 128000,
-            "ollama": 8000,
-        }
-        return provider_defaults.get(provider, 128000)
+        return None
 
     def _percent(self, token_count: Optional[int], model_limit: Optional[int]) -> Optional[float]:
         if not token_count or not model_limit:
@@ -377,3 +358,30 @@ class LLMRouter:
                 self.ollama_online = False
                 if attempt + 1 < attempts:
                     time.sleep(3)
+    def _cloud_models_for(self, provider: str) -> Tuple[str, List[ModelInfo]]:
+        key = self.settings.provider_keys.get(provider)
+        if not key:
+            return "no_key", []
+
+        # Placeholder: rely on known allowlists; a real impl would list via provider API.
+        allowlists = {
+            "openai": ["openai/gpt-4o", "openai/gpt-4o-mini"],
+            "anthropic": ["anthropic/claude-3-5-sonnet"],
+            "groq": ["groq/llama-3.1-70b"],
+        }
+        models = allowlists.get(provider, [])
+        if not models:
+            return "no_models", []
+
+        return "ok", [
+            ModelInfo(
+                name=model,
+                provider=provider,
+                default=model == self.settings.default_model,
+                description=None,
+                source="cloud",
+                ctx=None,
+                cost_per_1k=None,
+            )
+            for model in models
+        ]

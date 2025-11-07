@@ -1,121 +1,135 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import PropTypes from 'prop-types'
 
-const formatContext = (limit) =>
-  limit ? `${Intl.NumberFormat().format(limit)} tokens` : 'context unknown'
-
-const formatCost = (cost) => (cost ? `$${cost.toFixed(4)}/1K` : 'cost unknown')
-
-const radioTitle = (model) => {
-  const parts = [
-    `${model.provider} • ${model.category === 'local' ? 'local' : 'cloud'}`,
-    formatContext(model.context_limit),
-    formatCost(model.cost_per_1k),
-  ]
-  if (model.description) parts.push(model.description)
-  return parts.join(' | ')
-}
-
-const defaultSections = {
-  all: true,
-  local: true,
-  cloud: true,
-}
+const defaultSections = ['all', 'local', 'cloud']
 
 export default function ModelSelector({
   models,
   activeModel,
   onSelect,
   disabled,
+  providerStatus,
+  onOpenSettings,
 }) {
-  const localModels = models.filter((model) => model.category === 'local')
-  const cloudModels = models.filter((model) => model.category !== 'local')
-  const [sections, setSections] = useState(() => {
+  const validModels = useMemo(
+    () =>
+      models.filter(
+        (model) => model.available !== false && model.model_status !== 'offline',
+      ),
+    [models],
+  )
+
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const persisted = localStorage.getItem('selectedModel')
+    return activeModel || persisted || ''
+  })
+
+  useEffect(() => {
+    if (activeModel && activeModel !== selectedModel) {
+      setSelectedModel(activeModel)
+    }
+  }, [activeModel])
+
+  const [open, setOpen] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('model_sections')) || defaultSections
+      const stored = JSON.parse(localStorage.getItem('model_sections_open'))
+      return stored || defaultSections.reduce((acc, id) => ({ ...acc, [id]: true }), {})
     } catch {
-      return defaultSections
+      return defaultSections.reduce((acc, id) => ({ ...acc, [id]: true }), {})
     }
   })
 
   useEffect(() => {
-    localStorage.setItem('model_sections', JSON.stringify(sections))
-  }, [sections])
+    localStorage.setItem('model_sections_open', JSON.stringify(open))
+  }, [open])
 
-  const renderList = (list, heading, key) => {
-    const items = list.length > 80 ? list.slice(0, 80) : list
+  const filteredModels = (section) => {
+    if (section === 'local') return validModels.filter((m) => m.category === 'local')
+    if (section === 'cloud') return validModels.filter((m) => m.category !== 'local')
+    return validModels
+  }
 
+  const sections = defaultSections
+    .map((id) => ({
+      id,
+      title: id === 'all' ? 'All Models' : id === 'local' ? 'Local' : 'Cloud',
+      items: filteredModels(id),
+    }))
+    .filter((section) => section.items.length > 0)
+
+  const handleSelect = (name) => {
+    if (disabled) return
+    setSelectedModel(name)
+    localStorage.setItem('selectedModel', name)
+    onSelect?.(name)
+  }
+
+  const providerWarnings = useMemo(() => {
+    const entries = Object.entries(providerStatus || {})
+    return entries.filter(([, status]) => status && status !== 'ok')
+  }, [providerStatus])
+
+  const handleProviderClick = (provider) => {
+    onOpenSettings?.(provider)
+  }
+
+  if (!sections.length) {
     return (
-    <div className="model-collapsible">
-      <button
-        type="button"
-        className="model-collapsible-header"
-        onClick={() => setSections((prev) => ({ ...prev, [key]: !prev[key] }))}
-      >
-        <span>{sections[key] ? '▼' : '▶'}</span>
-        <strong>{heading}</strong>
-      </button>
-      <div
-        className="model-collapsible-body"
-        style={{
-          maxHeight: sections[key] ? 'unset' : 0,
-          opacity: sections[key] ? 1 : 0,
-        }}
-      >
-        {list.length === 0 ? (
-          <p className="muted">No models available.</p>
-        ) : (
-          <ul>
-            {items.map((model) => (
-              <li key={model.name}>
-                <label className="radio-row" title={radioTitle(model)}>
-                  <input
-                    type="radio"
-                    name={`model-${key}`}
-                    value={model.name}
-                    checked={activeModel === model.name}
-                    onChange={() => onSelect?.(model.name)}
-                    disabled={disabled || model.description === 'Ollama offline'}
-                  />
-                  <span>
-                    <strong>{model.name}</strong>
-                    <em>{model.provider}</em>
-                    {model.description && <small>{model.description}</small>}
-                    <div className="model-meta">
-                      {model.context_limit && (
-                        <span>{formatContext(model.context_limit)}</span>
-                      )}
-                      {model.cost_per_1k && (
-                        <span>{formatCost(model.cost_per_1k)}</span>
-                      )}
-                    </div>
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        )}
-        {list.length > items.length && (
-          <p className="muted">Showing first {items.length} of {list.length} models.</p>
-        )}
-      </div>
-    </div>
-  )}
+      <section className="model-selector">
+        <header className="panel-header">
+          <h2>Models</h2>
+        </header>
+        <p className="muted">No models available.</p>
+      </section>
+    )
+  }
 
   return (
     <section className="model-selector">
       <header className="panel-header">
         <h2>Models</h2>
       </header>
-      {models.length === 0 ? (
-        <p className="muted">No models configured.</p>
-      ) : (
-        <div className="model-sections">
-          {renderList(models, 'All models', 'all')}
-          {renderList(localModels, 'Local', 'local')}
-          {renderList(cloudModels, 'Cloud', 'cloud')}
-        </div>
-      )}
+      <div className="model-sections">
+        {sections.map((section) => (
+          <div key={section.id} className="model-section">
+            <h4
+              className="model-section__header"
+              onClick={() => setOpen((prev) => ({ ...prev, [section.id]: !prev[section.id] }))}
+            >
+              {open[section.id] ? '▼' : '▶'} {section.title} ({section.items.length})
+            </h4>
+            {open[section.id] && (
+              <ul className="model-list">
+                {section.items.map((model) => (
+                  <li
+                    key={model.name}
+                    className={model.name === selectedModel ? 'is-active' : ''}
+                    onClick={() => handleSelect(model.name)}
+                    title={`${model.provider} • ${model.category}`}
+                  >
+                    <span>{model.name}</span>
+                    <span className="provider">{model.provider}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+        {providerWarnings.length > 0 && (
+          <div className="provider-warnings">
+            {providerWarnings.map(([provider, status]) => (
+              <button
+                key={provider}
+                type="button"
+                className="provider-warning"
+                onClick={() => handleProviderClick(provider)}
+              >
+                {provider} ({status})
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   )
 }
@@ -125,18 +139,22 @@ ModelSelector.propTypes = {
     PropTypes.shape({
       name: PropTypes.string.isRequired,
       provider: PropTypes.string,
-      description: PropTypes.string,
-      default: PropTypes.bool,
       category: PropTypes.string,
+      available: PropTypes.bool,
+      model_status: PropTypes.string,
     }),
   ),
   activeModel: PropTypes.string,
   onSelect: PropTypes.func,
   disabled: PropTypes.bool,
+  providerStatus: PropTypes.objectOf(PropTypes.string),
+  onOpenSettings: PropTypes.func,
 }
 
 ModelSelector.defaultProps = {
   models: [],
   activeModel: '',
   disabled: false,
+  providerStatus: {},
+  onOpenSettings: undefined,
 }

@@ -49,6 +49,7 @@ function App() {
     getDuplicates,
     mergeMemories,
     analyzeContradictions,
+    providerStatus,
   } = useSynapseApi()
 
   const [selectedMemoryIds, setSelectedMemoryIds] = useState(prefs.memoryIds || [])
@@ -416,17 +417,25 @@ function App() {
     }
   }
 
+  const handleOpenSettings = () => {
+    document
+      .querySelector('[data-settings-panel]')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
         <ModelSelector
           models={models}
+          providerStatus={providerStatus}
           activeModel={activeModel}
           onSelect={(model) => {
             setActiveModel(model)
             setStatusMessage(`Model switched to ${model}`)
           }}
           disabled={loading.chat}
+          onOpenSettings={handleOpenSettings}
         />
         <MemoryPanel
           memories={memories}

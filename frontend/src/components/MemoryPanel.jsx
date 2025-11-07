@@ -301,8 +301,9 @@ export default function MemoryPanel(props) {
               />
             </div>
           </div>
-          <form className="memory-form" onSubmit={handleSubmit}>
-            <h3>Add Memory</h3>
+      <div data-settings-panel>
+      <form className="memory-form" onSubmit={handleSubmit}>
+        <h3>Add Memory</h3>
             <input
               name="title"
               type="text"
@@ -327,7 +328,8 @@ export default function MemoryPanel(props) {
             <button type="submit" className="primary" disabled={loading}>
               Save Memory
             </button>
-          </form>
+      </form>
+      </div>
         </>,
       )}
     </section>

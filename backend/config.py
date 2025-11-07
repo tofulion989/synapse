@@ -129,39 +129,9 @@ class Settings:
 
     def _derive_allowed_models(self, explicit: List[str]) -> List[str]:
         models: List[str] = []
-
         if explicit:
             models.extend(explicit)
-
-        # Always include default model
-        if self.default_model not in models:
-            models.append(self.default_model)
-
-        # Ollama default
-        if f"ollama/{self.ollama_model}" not in models:
-            models.append(f"ollama/{self.ollama_model}")
-
-        provider_defaults = {
-            "openai": ["openai/gpt-4o", "openai/gpt-4o-mini", "openai/gpt-4.1-mini"],
-            "anthropic": ["anthropic/claude-3-5-sonnet", "anthropic/claude-3-opus"],
-            "groq": ["groq/llama-3.1-70b", "groq/llama-3.1-8b"],
-        }
-
-        for provider, defaults in provider_defaults.items():
-            if provider in self.provider_keys:
-                for model in defaults:
-                    if model not in models:
-                        models.append(model)
-
-        # Deduplicate while preserving order
-        seen = set()
-        unique_models = []
-        for model in models:
-            if model in seen:
-                continue
-            seen.add(model)
-            unique_models.append(model)
-        return unique_models
+        return models
 
 
 _settings_instance: Settings | None = None

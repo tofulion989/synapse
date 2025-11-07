@@ -28,6 +28,8 @@ const initialLoading = {
 
 export function useSynapseApi() {
   const [models, setModels] = useState([])
+  const [providerStatus, setProviderStatus] = useState({})
+  const [ollamaStatus, setOllamaStatus] = useState('unknown')
   const [memories, setMemories] = useState([])
   const [tags, setTags] = useState([])
   const [loading, setLoading] = useState(initialLoading)
@@ -57,7 +59,9 @@ export function useSynapseApi() {
   const refreshModels = useCallback(
     withLoading('models', async () => {
       const response = await listModels()
-      setModels(response || [])
+      setModels(response?.models || [])
+      setProviderStatus(response?.provider_status || {})
+      setOllamaStatus(response?.ollama_status || 'unknown')
     }),
     [withLoading],
   )
@@ -225,6 +229,8 @@ export function useSynapseApi() {
 
   return {
     models,
+    providerStatus,
+    ollamaStatus,
     memories,
     tags,
     loading,
