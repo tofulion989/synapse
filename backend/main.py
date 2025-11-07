@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
 from datetime import datetime
+import logging
+from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
