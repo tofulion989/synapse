@@ -6,20 +6,6 @@ import MemoryPanel from './components/MemoryPanel'
 import ModelSelector from './components/ModelSelector'
 import { useSynapseApi } from './hooks/useSynapseApi'
 
-const introMessages = [
-  {
-    id: 'msg-001',
-    role: 'system',
-    content: 'You are Synapse, the unified AI command console.',
-  },
-  {
-    id: 'msg-002',
-    role: 'assistant',
-    content:
-      'Ready when you are. Select memories to inject context and choose the model on the left.',
-  },
-]
-
 const randomId = (prefix) => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID()
@@ -59,7 +45,7 @@ function App() {
   } = useSynapseApi()
 
   const [selectedMemoryIds, setSelectedMemoryIds] = useState(prefs.memoryIds || [])
-  const [messages, setMessages] = useState(introMessages)
+  const [messages, setMessages] = useState([])
   const [activeModel, setActiveModel] = useState(prefs.model || '')
   const [searchQuery, setSearchQuery] = useState(prefs.search || '')
   const [activeTags, setActiveTags] = useState(prefs.tags || [])
