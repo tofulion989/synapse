@@ -78,6 +78,9 @@ export default function ChatPanel({
     if (!draft.trim()) return
     await onSend?.(draft.trim())
     setDraft('')
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+    })
   }
 
   const formatTokens = (value) => {
@@ -191,6 +194,9 @@ export default function ChatPanel({
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
               handleSubmit(event)
+              requestAnimationFrame(() => {
+                textareaRef.current?.focus()
+              })
             }
           }}
         />
