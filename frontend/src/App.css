@@ -12,6 +12,7 @@
   flex-direction: column;
   gap: 1.5rem;
   overflow-y: auto;
+  height: 100vh;
 }
 
 .app-content {
@@ -151,7 +152,16 @@
   color: #475569;
 }
 
-.model-collapsible-stack {
+.model-selector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.model-sections {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -160,7 +170,6 @@
 .model-collapsible {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  padding: 0.4rem 0.6rem;
 }
 
 .model-collapsible-header {
@@ -169,22 +178,26 @@
   align-items: center;
   gap: 0.3rem;
   border: none;
-  background: none;
+  background: #fff;
   font-size: 0.9rem;
   cursor: pointer;
-  padding: 0.2rem 0;
+  padding: 0.35rem 0.6rem;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .model-collapsible-body {
-  max-height: 0;
   overflow: hidden;
   transition: max-height 0.25s ease, opacity 0.25s ease;
   opacity: 0;
+  max-height: 0;
 }
 
 .model-collapsible-body.open {
-  max-height: 600px;
+  max-height: unset;
   opacity: 1;
+  padding: 0.4rem 0.6rem 0.6rem;
 }
 
 .memory-search input {

@@ -42,7 +42,10 @@ export default function ModelSelector({
     localStorage.setItem('model_sections', JSON.stringify(sections))
   }, [sections])
 
-  const renderList = (list, heading, key) => (
+  const renderList = (list, heading, key) => {
+    const items = list.length > 80 ? list.slice(0, 80) : list
+
+    return (
     <div className="model-collapsible">
       <button
         type="button"
@@ -52,12 +55,18 @@ export default function ModelSelector({
         <span>{sections[key] ? '▼' : '▶'}</span>
         <strong>{heading}</strong>
       </button>
-      <div className={`model-collapsible-body ${sections[key] ? 'open' : ''}`}>
+      <div
+        className="model-collapsible-body"
+        style={{
+          maxHeight: sections[key] ? 'unset' : 0,
+          opacity: sections[key] ? 1 : 0,
+        }}
+      >
         {list.length === 0 ? (
           <p className="muted">No models available.</p>
         ) : (
           <ul>
-            {list.map((model) => (
+            {items.map((model) => (
               <li key={model.name}>
                 <label className="radio-row" title={radioTitle(model)}>
                   <input
@@ -86,9 +95,12 @@ export default function ModelSelector({
             ))}
           </ul>
         )}
+        {list.length > items.length && (
+          <p className="muted">Showing first {items.length} of {list.length} models.</p>
+        )}
       </div>
     </div>
-  )
+  )}
 
   return (
     <section className="model-selector">
@@ -98,7 +110,7 @@ export default function ModelSelector({
       {models.length === 0 ? (
         <p className="muted">No models configured.</p>
       ) : (
-        <div className="model-collapsible-stack">
+        <div className="model-sections">
           {renderList(models, 'All models', 'all')}
           {renderList(localModels, 'Local', 'local')}
           {renderList(cloudModels, 'Cloud', 'cloud')}
