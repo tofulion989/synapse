@@ -15,6 +15,7 @@ import {
   listTags,
   summarizeConversation,
   suggestMemories,
+  saveModelPreferences,
 } from '../lib/api'
 
 const initialLoading = {
@@ -227,6 +228,19 @@ export function useSynapseApi() {
     [withLoading],
   )
 
+  const updateModelPreferences = useCallback(
+    withLoading('models', async (preferences) => {
+      await saveModelPreferences(preferences)
+      setModels((prev) =>
+        prev.map((model) => {
+          const match = preferences.find((pref) => pref.name === model.name)
+          return match ? { ...model, enabled: match.enabled } : model
+        }),
+      )
+    }),
+    [withLoading],
+  )
+
   return {
     models,
     providerStatus,
@@ -254,5 +268,6 @@ export function useSynapseApi() {
     getDuplicates,
     mergeMemories,
     analyzeContradictions,
+    updateModelPreferences,
   }
 }

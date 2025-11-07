@@ -182,3 +182,10 @@ export async function detectContradictions(payload) {
     body: payload,
   })
 }
+
+export async function saveModelPreferences(preferences) {
+  return request('/api/models/preferences', {
+    method: 'POST',
+    body: { preferences },
+  })
+}

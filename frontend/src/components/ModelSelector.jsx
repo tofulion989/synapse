@@ -14,7 +14,10 @@ export default function ModelSelector({
   const validModels = useMemo(
     () =>
       models.filter(
-        (model) => model.available !== false && model.model_status !== 'offline',
+        (model) =>
+          model.available !== false &&
+          model.enabled !== false &&
+          model.model_status !== 'offline',
       ),
     [models],
   )

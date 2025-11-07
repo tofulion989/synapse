@@ -27,6 +27,7 @@ from .models import (
     MemorySuggestionRequest,
     MemorySuggestionResponse,
     ModelListResponse,
+    ModelPreferenceRequest,
     SummarizeRequest,
     SummarizeResponse,
 )
@@ -114,6 +115,15 @@ async def list_models(router: LLMRouter = Depends(get_llm_router)) -> ModelListR
         len(payload.models),
     )
     return payload
+
+
+@api_router.post("/models/preferences")
+async def update_model_preferences(
+    request: ModelPreferenceRequest,
+    router: LLMRouter = Depends(get_llm_router),
+) -> dict:
+    router.update_preferences(request.preferences)
+    return {"status": "ok", "updated": len(request.preferences)}
 
 
 @api_router.get("/memories", response_model=List[MemoryRecord])

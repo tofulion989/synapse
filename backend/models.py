@@ -87,6 +87,7 @@ class ModelMetadata(BaseModel):
     available: bool = True
     model_status: str = "ok"
     cost_per_1k: Optional[float] = None
+    enabled: bool = True
 
 
 class ProviderStatus(BaseModel):
@@ -99,6 +100,15 @@ class ModelListResponse(BaseModel):
     models: List[ModelMetadata]
     provider_status: List[ProviderStatus]
     ollama_status: Optional[str] = None
+
+
+class ModelPreference(BaseModel):
+    name: str
+    enabled: bool = True
+
+
+class ModelPreferenceRequest(BaseModel):
+    preferences: List[ModelPreference]
 
 
 class UsageStats(BaseModel):

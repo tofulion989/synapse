@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, Mapping, Sequence, Union, List, Optional, Tuple
-
+import json
 import logging
 import time
+from pathlib import Path
+from typing import Any, Dict, Mapping, Sequence, Union, List, Optional, Tuple
 
 import requests
 from litellm import completion, model_cost, token_counter
@@ -15,6 +16,7 @@ from .models import (
     MemoryRecord,
     ModelListResponse,
     ModelMetadata,
+    ModelPreference,
     ProviderStatus,
 )
 
@@ -26,6 +28,9 @@ class LLMRouter:
         self.settings = settings or get_settings()
         self.ollama_online = False
         self.ollama_tags: List[str] = []
+        self.prefs_path = Path(__file__).resolve().parent / "data" / "model_prefs.json"
+        self.prefs_path.parent.mkdir(parents=True, exist_ok=True)
+        self.model_prefs = self._load_model_prefs()
         self.ollama_status = "unknown"
         self._probe_ollama(initial=True)
 
@@ -58,6 +63,7 @@ class LLMRouter:
             cost = self._model_cost(model.name)
             model.ctx = limit
             model.cost_per_1k = cost
+            model.enabled = self.model_prefs.get(model.name, True)
             all_models.append(model)
 
         provider_status_entries.append(
@@ -337,6 +343,27 @@ class LLMRouter:
         if cost:
             return round(cost * 1000, 6)
         return None
+
+    def _load_model_prefs(self) -> Dict[str, bool]:
+        if not self.prefs_path.exists():
+            return {}
+        try:
+            return json.loads(self.prefs_path.read_text(encoding="utf-8"))
+        except Exception:
+            logging.warning("Failed to load model preferences, resetting.")
+            return {}
+
+    def _save_model_prefs(self) -> None:
+        try:
+            with self.prefs_path.open("w", encoding="utf-8") as handle:
+                json.dump(self.model_prefs, handle, ensure_ascii=False, indent=2)
+        except Exception as exc:
+            logging.error("Failed to persist model preferences: %s", exc)
+
+    def update_preferences(self, preferences: List[ModelPreference]) -> None:
+        for pref in preferences:
+            self.model_prefs[pref.name] = bool(pref.enabled)
+        self._save_model_prefs()
 
     def _probe_ollama(self, initial: bool = False) -> None:
         endpoints = [self.settings.ollama_base_url.rstrip("/"), "http://127.0.0.1:11434"]

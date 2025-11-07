@@ -32,6 +32,7 @@ export default function MemoryPanel(props) {
     onCheckDuplicates,
     onMergeDuplicates,
     onCheckContradictions,
+    onOpenConfig,
     searchQuery,
     loading,
   } = props
@@ -328,6 +329,13 @@ export default function MemoryPanel(props) {
             <button type="submit" className="primary" disabled={loading}>
               Save Memory
             </button>
+            <button
+              type="button"
+              className="text-button"
+              onClick={onOpenConfig}
+            >
+              Model Configuration
+            </button>
       </form>
       </div>
         </>,
@@ -381,6 +389,7 @@ MemoryPanel.propTypes = {
   onCheckDuplicates: PropTypes.func,
   onMergeDuplicates: PropTypes.func,
   onCheckContradictions: PropTypes.func,
+  onOpenConfig: PropTypes.func,
   searchQuery: PropTypes.string,
   loading: PropTypes.bool,
 }
@@ -393,6 +402,7 @@ MemoryPanel.defaultProps = {
   suggestions: [],
   duplicateGroups: [],
   contradictionReport: '',
+  onOpenConfig: undefined,
   searchQuery: '',
   loading: false,
 }

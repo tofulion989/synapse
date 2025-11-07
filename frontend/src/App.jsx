@@ -4,6 +4,7 @@ import './App.css'
 import ChatPanel from './components/ChatPanel'
 import MemoryPanel from './components/MemoryPanel'
 import ModelSelector from './components/ModelSelector'
+import ConfigPage from './pages/Config'
 import { useSynapseApi } from './hooks/useSynapseApi'
 
 const randomId = (prefix) => {
@@ -51,6 +52,7 @@ function App() {
     getDuplicates,
     mergeMemories,
     analyzeContradictions,
+    updateModelPreferences,
   } = useSynapseApi()
 
   const [selectedMemoryIds, setSelectedMemoryIds] = useState(prefs.memoryIds || [])
@@ -65,6 +67,13 @@ function App() {
   const [summaryResult, setSummaryResult] = useState(null)
   const [contradictionReport, setContradictionReport] = useState(null)
   const controllerRef = useRef(null)
+  const handleOpenConfig = () => setActiveView('config')
+  const handleCloseConfig = () => setActiveView('workspace')
+  const handleSavePreferences = async (preferences) => {
+    await updateModelPreferences(preferences)
+    refreshModels()
+  }
+  const [activeView, setActiveView] = useState('workspace')
 
   useEffect(() => {
     refreshModels()
@@ -427,6 +436,22 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
+        <div className="sidebar-nav">
+          <button
+            type="button"
+            className={activeView === 'workspace' ? 'is-active' : ''}
+            onClick={() => setActiveView('workspace')}
+          >
+            Workspace
+          </button>
+          <button
+            type="button"
+            className={activeView === 'config' ? 'is-active' : ''}
+            onClick={handleOpenConfig}
+          >
+            Settings
+          </button>
+        </div>
         <ModelSelector
           models={models}
           providerStatus={providerStatus}
@@ -467,6 +492,7 @@ function App() {
           onMergeDuplicates={handleMergeDuplicates}
           onCheckContradictions={handleContradictionCheck}
           contradictionReport={contradictionReport}
+          onOpenConfig={handleOpenConfig}
           loading={loading.memories}
         />
       </aside>
@@ -476,30 +502,41 @@ function App() {
             {error || statusMessage}
           </div>
         )}
-        <ChatPanel
-          messages={messages}
-          onSend={handleSend}
-          isStreaming={loading.chat}
-          onStop={() => controllerRef.current?.abort()}
-          selectedMemories={selectedMemories}
-          onSaveMemory={(message) =>
-            handleCreateMemory({
-              title: message.content.slice(0, 60),
-              content: message.content,
-              tags: ['#chat'],
-            })
-          }
-          systemPrompt={systemPrompt}
-          onSystemPromptChange={setSystemPrompt}
-          systemExpanded={showSystemPrompt}
-          onToggleSystem={() => setShowSystemPrompt((prev) => !prev)}
-          usageStats={stats}
-          activeModel={activeModel}
-          showStatsDetails={showStatsDetails}
-          onToggleStats={() => setShowStatsDetails((prev) => !prev)}
-          onSummarize={handleSummarize}
-          summaryResult={summaryResult}
-        />
+        {activeView === 'config' ? (
+          <ConfigPage
+            models={models}
+            providerStatus={providerStatus}
+            onSavePreferences={handleSavePreferences}
+            onRefresh={refreshModels}
+            saving={loading.models}
+            onClose={handleCloseConfig}
+          />
+        ) : (
+          <ChatPanel
+            messages={messages}
+            onSend={handleSend}
+            isStreaming={loading.chat}
+            onStop={() => controllerRef.current?.abort()}
+            selectedMemories={selectedMemories}
+            onSaveMemory={(message) =>
+              handleCreateMemory({
+                title: message.content.slice(0, 60),
+                content: message.content,
+                tags: ['#chat'],
+              })
+            }
+            systemPrompt={systemPrompt}
+            onSystemPromptChange={setSystemPrompt}
+            systemExpanded={showSystemPrompt}
+            onToggleSystem={() => setShowSystemPrompt((prev) => !prev)}
+            usageStats={stats}
+            activeModel={activeModel}
+            showStatsDetails={showStatsDetails}
+            onToggleStats={() => setShowStatsDetails((prev) => !prev)}
+            onSummarize={handleSummarize}
+            summaryResult={summaryResult}
+          />
+        )}
       </main>
     </div>
   )
