@@ -42,12 +42,18 @@ class LLMRouter:
             if name in seen:
                 continue
             seen.add(name)
+            category = "local" if provider == "ollama" else "cloud"
+            context_limit = self._model_limit(name)
+            cost = self._model_cost(name)
             infos.append(
                 ModelInfo(
                     name=name,
                     provider=provider,
                     default=name == self.settings.default_model,
                     description=description or f"{provider} model ({name})",
+                    category=category,
+                    context_limit=context_limit,
+                    cost_per_1k=cost,
                 )
             )
 
@@ -336,6 +342,15 @@ class LLMRouter:
         if not token_count or not model_limit:
             return None
         return round((token_count / model_limit) * 100, 1)
+
+    def _model_cost(self, model_name: str) -> Optional[float]:
+        info = model_cost.get(model_name)
+        if not info:
+            return None
+        cost = info.get("input_cost_per_token")
+        if cost:
+            return round(cost * 1000, 6)
+        return None
 
     def _probe_ollama(self, initial: bool = False) -> None:
         base_url = self.settings.ollama_base_url.rstrip("/")

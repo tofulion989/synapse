@@ -84,6 +84,9 @@ class ModelInfo(BaseModel):
     provider: str
     description: Optional[str] = None
     default: bool = False
+    category: str = "cloud"
+    context_limit: Optional[int] = None
+    cost_per_1k: Optional[float] = None
 
 
 class UsageStats(BaseModel):
