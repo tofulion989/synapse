@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, Mapping, Sequence, Union, List, Optional
+from typing import Any, Dict, Mapping, Sequence, Union, List, Optional, Tuple
 
+import requests
 from litellm import completion, model_cost, token_counter
 
 from .config import Settings, get_settings
@@ -14,18 +15,56 @@ class LLMRouter:
 
     def __init__(self, settings: Optional[Settings] = None) -> None:
         self.settings = settings or get_settings()
+        self.ollama_online = False
+        self.ollama_tags: List[str] = []
+        self._probe_ollama()
 
     @property
     def models(self) -> List[ModelInfo]:
+        self._probe_ollama()
         infos: List[ModelInfo] = []
-        for name in self.settings.allowed_models:
+        candidates = list(self.settings.allowed_models)
+        if self.ollama_online:
+            for tag in self.ollama_tags:
+                candidate = f"ollama/{tag}"
+                if candidate not in candidates:
+                    candidates.append(candidate)
+
+        seen = set()
+        for name in candidates:
             provider = self._provider_from_model(name)
+            description = None
+            if provider == "ollama" and not self.ollama_online:
+                description = "Ollama offline"
+            if name in seen:
+                continue
+            seen.add(name)
             infos.append(
                 ModelInfo(
                     name=name,
                     provider=provider,
                     default=name == self.settings.default_model,
-                    description=f"{provider} model ({name})",
+                    description=description or f"{provider} model ({name})",
+                )
+            )
+
+        if self.ollama_online and not self.ollama_tags:
+            infos.append(
+                ModelInfo(
+                    name="ollama/—",
+                    provider="ollama",
+                    description="No local models installed",
+                    default=False,
+                )
+            )
+
+        if not self.ollama_online:
+            infos.append(
+                ModelInfo(
+                    name="ollama/offline",
+                    provider="ollama",
+                    description="Ollama offline",
+                    default=False,
                 )
             )
         return infos
@@ -36,6 +75,8 @@ class LLMRouter:
         model: Optional[str] = None,
     ) -> Dict[str, Any]:
         model_name = model or self.settings.default_model
+        if self._provider_from_model(model_name) == "ollama" and not self.ollama_online:
+            self._probe_ollama()
         normalised = []
         for message in messages:
             if isinstance(message, ChatMessage):
@@ -292,3 +333,22 @@ class LLMRouter:
         if not token_count or not model_limit:
             return None
         return round((token_count / model_limit) * 100, 1)
+
+    def _probe_ollama(self) -> None:
+        base_url = self.settings.ollama_base_url.rstrip("/")
+        tags_endpoint = f"{base_url}/api/tags"
+        try:
+            response = requests.get(tags_endpoint, timeout=2)
+            response.raise_for_status()
+            data = response.json()
+            models = data.get("models", [])
+            parsed = []
+            for model in models:
+                name = model.get("name") or model.get("tag")
+                if name:
+                    parsed.append(name)
+            self.ollama_tags = parsed
+            self.ollama_online = True
+        except Exception:
+            self.ollama_tags = []
+            self.ollama_online = False

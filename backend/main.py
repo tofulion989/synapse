@@ -96,6 +96,14 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+@api_router.get("/ollama/status")
+async def ollama_status(router: LLMRouter = Depends(get_llm_router)) -> dict:
+    return {
+        "online": router.ollama_online,
+        "base_url": router.settings.ollama_base_url,
+        "models": router.ollama_tags,
+    }
+
 @api_router.get("/models", response_model=List[ModelInfo])
 async def list_models(router: LLMRouter = Depends(get_llm_router)) -> List[ModelInfo]:
     return router.models

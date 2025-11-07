@@ -29,12 +29,13 @@ export default function ModelSelector({
                 <span>
                   <strong>{model.name}</strong>
                   <em>{model.provider}</em>
+                  {model.description && <small>{model.description}</small>}
                 </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      )}
+             </label>
+           </li>
+         ))}
+       </ul>
+     )}
     </section>
   )
 }
