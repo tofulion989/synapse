@@ -26,6 +26,7 @@ export function useSynapseApi() {
   const [memories, setMemories] = useState([])
   const [tags, setTags] = useState([])
   const [loading, setLoading] = useState(initialLoading)
+  const [stats, setStats] = useState(null)
   const [error, setError] = useState(null)
 
   const withLoading = useCallback((key, fn) => {
@@ -91,7 +92,9 @@ export function useSynapseApi() {
 
   const sendChat = useCallback(
     withLoading('chat', async (payload) => {
-      return chatWithModel(payload)
+      const response = await chatWithModel(payload)
+      setStats(response?.stats || null)
+      return response
     }),
     [withLoading],
   )
@@ -124,6 +127,9 @@ export function useSynapseApi() {
             try {
               const data = JSON.parse(line)
               onEvent?.(data)
+              if (data.event === 'complete' && data.stats) {
+                setStats(data.stats)
+              }
             } catch (err) {
               console.error('Failed to parse stream chunk', err)
             }
@@ -137,6 +143,9 @@ export function useSynapseApi() {
             try {
               const data = JSON.parse(tail)
               onEvent?.(data)
+              if (data.event === 'complete' && data.stats) {
+                setStats(data.stats)
+              }
             } catch (err) {
               console.error('Failed to parse trailing chunk', err)
             }
@@ -171,6 +180,7 @@ export function useSynapseApi() {
     tags,
     loading,
     error,
+    stats,
     refreshModels,
     refreshMemories,
     refreshTags,
@@ -181,5 +191,6 @@ export function useSynapseApi() {
     exportAllMemories,
     importMemoryBatch,
     setError,
+    setStats,
   }
 }

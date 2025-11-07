@@ -30,6 +30,7 @@ class ChatRequest(BaseModel):
     include_memories: List[str] = Field(default_factory=list, description="Memory IDs to retrieve and inject.")
     inject_memories: bool = Field(True, description="If false, do not prepend memory content to the prompt.")
     stream: bool = Field(False, description="Enable streaming responses (future enhancement).")
+    system: Optional[str] = Field(None, description="Optional system prompt prepended before context.")
 
 
 class ChatResponse(BaseModel):
@@ -38,6 +39,7 @@ class ChatResponse(BaseModel):
     content: str
     used_memories: List[str] = Field(default_factory=list)
     placeholder: bool = False
+    stats: Optional["UsageStats"] = None
 
 
 class MemoryCreate(BaseModel):
@@ -80,3 +82,12 @@ class ModelInfo(BaseModel):
     provider: str
     description: Optional[str] = None
     default: bool = False
+
+
+class UsageStats(BaseModel):
+    token_count: int
+    model_limit: Optional[int] = None
+    percent_used: Optional[float] = None
+
+
+ChatResponse.model_rebuild()

@@ -45,6 +45,7 @@ function App() {
     tags,
     loading,
     error,
+    stats,
     refreshModels,
     refreshMemories,
     refreshTags,
@@ -54,6 +55,7 @@ function App() {
     exportAllMemories,
     importMemoryBatch,
     setError,
+    setStats,
   } = useSynapseApi()
 
   const [selectedMemoryIds, setSelectedMemoryIds] = useState(prefs.memoryIds || [])
@@ -61,6 +63,9 @@ function App() {
   const [activeModel, setActiveModel] = useState(prefs.model || '')
   const [searchQuery, setSearchQuery] = useState(prefs.search || '')
   const [activeTags, setActiveTags] = useState(prefs.tags || [])
+  const [systemPrompt, setSystemPrompt] = useState(prefs.systemPrompt || '')
+  const [showSystemPrompt, setShowSystemPrompt] = useState(prefs.showSystemPrompt ?? false)
+  const [showStatsDetails, setShowStatsDetails] = useState(prefs.showStatsDetails ?? false)
   const [statusMessage, setStatusMessage] = useState(null)
   const controllerRef = useRef(null)
 
@@ -78,6 +83,10 @@ function App() {
       return preferred?.name ?? models[0].name
     })
   }, [models])
+
+  useEffect(() => {
+    setStats(null)
+  }, [activeModel, setStats])
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -112,9 +121,20 @@ function App() {
       memoryIds: selectedMemoryIds,
       search: searchQuery,
       tags: activeTags,
+      systemPrompt,
+      showSystemPrompt,
+      showStatsDetails,
     }
     localStorage.setItem('synapse_prefs', JSON.stringify(payload))
-  }, [activeModel, selectedMemoryIds, searchQuery, activeTags])
+  }, [
+    activeModel,
+    selectedMemoryIds,
+    searchQuery,
+    activeTags,
+    systemPrompt,
+    showSystemPrompt,
+    showStatsDetails,
+  ])
 
   const selectedMemories = useMemo(
     () => memories.filter((memory) => selectedMemoryIds.includes(memory.id)),
@@ -150,13 +170,16 @@ function App() {
     const controller = new AbortController()
     controllerRef.current = controller
 
+    const payloadBase = {
+      messages: history.map(({ role, content }) => ({ role, content })),
+      model: activeModel || undefined,
+      include_memories: selectedMemoryIds,
+      system: systemPrompt || undefined,
+    }
+
     try {
       await streamChat(
-        {
-          messages: history.map(({ role, content }) => ({ role, content })),
-          model: activeModel || undefined,
-          include_memories: selectedMemoryIds,
-        },
+        payloadBase,
         {
           signal: controller.signal,
           onEvent: (event) => {
@@ -185,6 +208,9 @@ function App() {
                 ? `Response served by ${event.provider} (${event.model})`
                 : `Response served by ${event.model}`
               setStatusMessage(label)
+              if (event.stats) {
+                setStats(event.stats)
+              }
             } else if (event.event === 'error' && event.error) {
               setMessages((prev) =>
                 prev.map((message) =>
@@ -219,11 +245,7 @@ function App() {
       )
 
       try {
-        const response = await sendChat({
-          messages: history.map(({ role, content }) => ({ role, content })),
-          model: activeModel || undefined,
-          include_memories: selectedMemoryIds,
-        })
+        const response = await sendChat(payloadBase)
 
         setMessages((prev) =>
           prev.map((message) =>
@@ -367,7 +389,14 @@ function App() {
               tags: ['#chat'],
             })
           }
-          tokenUsage={null}
+          systemPrompt={systemPrompt}
+          onSystemPromptChange={setSystemPrompt}
+          systemExpanded={showSystemPrompt}
+          onToggleSystem={() => setShowSystemPrompt((prev) => !prev)}
+          usageStats={stats}
+          activeModel={activeModel}
+          showStatsDetails={showStatsDetails}
+          onToggleStats={() => setShowStatsDetails((prev) => !prev)}
         />
       </main>
     </div>

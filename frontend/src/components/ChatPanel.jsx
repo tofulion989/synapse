@@ -20,14 +20,23 @@ export default function ChatPanel({
   onSend,
   onStop,
   isStreaming,
-  tokenUsage,
   selectedMemories,
   onSaveMemory,
+  systemPrompt,
+  onSystemPromptChange,
+  systemExpanded,
+  onToggleSystem,
+  usageStats,
+  activeModel,
+  showStatsDetails,
+  onToggleStats,
 }) {
   const [draft, setDraft] = useState('')
   const endRef = useRef(null)
   const textareaRef = useRef(null)
+  const systemRef = useRef(null)
   const MAX_LINES = 6
+  const SYSTEM_MAX_LINES = 6
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -48,6 +57,22 @@ export default function ChatPanel({
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
   }, [draft])
 
+  useEffect(() => {
+    if (!systemExpanded) return
+    const textarea = systemRef.current
+    if (!textarea) return
+
+    textarea.style.height = 'auto'
+    const lineHeight =
+      typeof window !== 'undefined'
+        ? parseFloat(window.getComputedStyle(textarea).lineHeight) || 20
+        : 20
+    const maxHeight = lineHeight * SYSTEM_MAX_LINES
+    const newHeight = Math.min(textarea.scrollHeight, maxHeight)
+    textarea.style.height = `${newHeight}px`
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [systemPrompt, systemExpanded])
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     if (!draft.trim()) return
@@ -55,16 +80,29 @@ export default function ChatPanel({
     setDraft('')
   }
 
+  const formatTokens = (value) => {
+    if (value === null || value === undefined) return '—'
+    return value >= 1000 ? `${(value / 1000).toFixed(1)}K` : value.toString()
+  }
+
+  const usagePercent = usageStats?.percent_used
+  const usageClass =
+    usagePercent == null
+      ? 'usage-safe'
+      : usagePercent > 90
+      ? 'usage-high'
+      : usagePercent > 70
+      ? 'usage-warn'
+      : 'usage-safe'
+  const contextLabel = formatTokens(usageStats?.token_count)
+  const limitLabel = formatTokens(usageStats?.model_limit)
+  const percentLabel = usagePercent == null ? '—' : `${usagePercent}%`
+
   return (
     <section className="chat-panel">
       <header className="panel-header">
         <div>
           <h2>Conversation</h2>
-          {tokenUsage && (
-            <p className="muted">
-              Tokens: {tokenUsage.current} / {tokenUsage.limit}
-            </p>
-          )}
         </div>
         {isStreaming && onStop ? (
           <button type="button" className="text-button" onClick={onStop}>
@@ -72,6 +110,39 @@ export default function ChatPanel({
           </button>
         ) : null}
       </header>
+
+      <div className="system-block">
+        <button type="button" className="text-button" onClick={onToggleSystem}>
+          {systemExpanded ? 'Hide System Prompt' : 'Show System Prompt'}
+        </button>
+        {systemExpanded && (
+          <textarea
+            ref={systemRef}
+            className="system-textarea"
+            placeholder="Provide high-level guidance for Synapse…"
+            value={systemPrompt}
+            onChange={(event) => onSystemPromptChange?.(event.target.value)}
+            rows={2}
+          />
+        )}
+      </div>
+
+      <div className="usage-bar">
+        <span className={`usage-pill ${usageClass}`}>
+          Context: {contextLabel} / {limitLabel} tokens ({percentLabel})
+        </span>
+        <div className="usage-meta">
+          <span>Model: {activeModel || 'default'}</span>
+          <button type="button" className="usage-info" onClick={onToggleStats}>
+            ⓘ
+          </button>
+        </div>
+      </div>
+      {showStatsDetails && (
+        <div className="usage-details">
+          Includes the system prompt, manually selected memories, and recent chat history.
+        </div>
+      )}
 
       <div className="chat-body">
         <div className="chat-stream">
@@ -144,10 +215,6 @@ ChatPanel.propTypes = {
   onSend: PropTypes.func,
   onStop: PropTypes.func,
   isStreaming: PropTypes.bool,
-  tokenUsage: PropTypes.shape({
-    current: PropTypes.number.isRequired,
-    limit: PropTypes.number.isRequired,
-  }),
   selectedMemories: PropTypes.arrayOf(
     PropTypes.shape({
       id: PropTypes.string.isRequired,
@@ -156,11 +223,27 @@ ChatPanel.propTypes = {
     }),
   ),
   onSaveMemory: PropTypes.func,
+  systemPrompt: PropTypes.string,
+  onSystemPromptChange: PropTypes.func,
+  systemExpanded: PropTypes.bool,
+  onToggleSystem: PropTypes.func,
+  usageStats: PropTypes.shape({
+    token_count: PropTypes.number,
+    model_limit: PropTypes.number,
+    percent_used: PropTypes.number,
+  }),
+  activeModel: PropTypes.string,
+  showStatsDetails: PropTypes.bool,
+  onToggleStats: PropTypes.func,
 }
 
 ChatPanel.defaultProps = {
   messages: [],
   selectedMemories: [],
   isStreaming: false,
-  tokenUsage: null,
+  systemPrompt: '',
+  systemExpanded: false,
+  usageStats: null,
+  activeModel: '',
+  showStatsDetails: false,
 }

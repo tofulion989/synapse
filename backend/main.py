@@ -48,8 +48,14 @@ def _prepare_chat_messages(
     request: ChatRequest,
     store: MemoryStore,
 ) -> Tuple[List[dict], List[str]]:
-    messages = [message.model_dump() for message in request.messages]
+    base_messages = [message.model_dump() for message in request.messages]
+    messages: List[dict] = []
     used_memory_ids: List[str] = []
+
+    if request.system and request.system.strip():
+        messages.append({"role": "system", "content": request.system.strip()})
+
+    context_message = None
 
     if request.include_memories:
         selected = store.get_memories_by_ids(request.include_memories)
@@ -59,14 +65,18 @@ def _prepare_chat_messages(
                 context_block = "\n\n".join(
                     f"[{memory.title or memory.id}]\n{memory.content}" for memory in selected
                 )
-                system_message = {
+                context_message = {
                     "role": "system",
                     "content": (
                         "The following context snippets were manually selected by the user.\n"
                         f"{context_block}"
                     ),
                 }
-                messages = [system_message] + messages
+
+    if context_message:
+        messages.append(context_message)
+
+    messages.extend(base_messages)
 
     return messages, used_memory_ids
 
@@ -148,6 +158,7 @@ async def chat(
         content=result["content"],
         used_memories=used_memory_ids,
         placeholder=result.get("placeholder", False),
+        stats=result.get("stats"),
     )
 
 
