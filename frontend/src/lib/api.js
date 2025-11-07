@@ -77,6 +77,10 @@ export async function listMemories({ query, tags, limit } = {}) {
   })
 }
 
+export async function listTags() {
+  return request('/api/memories/tags')
+}
+
 export async function createMemory(memory) {
   return request('/api/memories', {
     method: 'POST',
@@ -87,6 +91,17 @@ export async function createMemory(memory) {
 export async function deleteMemory(memoryId) {
   return request(`/api/memories/${memoryId}`, {
     method: 'DELETE',
+  })
+}
+
+export async function exportMemories() {
+  return request('/api/memories/export')
+}
+
+export async function importMemories(payload) {
+  return request('/api/memories/import', {
+    method: 'POST',
+    body: payload,
   })
 }
 

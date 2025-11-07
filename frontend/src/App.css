@@ -36,6 +36,11 @@
   gap: 0.5rem;
 }
 
+.memory-toolbar {
+  display: flex;
+  gap: 0.35rem;
+}
+
 .text-button {
   border: none;
   background: none;
@@ -107,6 +112,48 @@
   flex-direction: column;
   gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+.memory-tag-filters {
+  margin-bottom: 1rem;
+}
+
+.tag-filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #4b5563;
+  margin-bottom: 0.4rem;
+}
+
+.tag-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tag-chip {
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  background: #f8fafc;
+  font-size: 0.8rem;
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  cursor: pointer;
+}
+
+.tag-chip span {
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+.tag-chip.is-active {
+  background: #eef2ff;
+  border-color: #4f46e5;
+  color: #312e81;
 }
 
 .memory-item {

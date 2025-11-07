@@ -89,6 +89,12 @@ export default function ChatPanel({
           onChange={(event) => setDraft(event.target.value)}
           rows={3}
           disabled={isStreaming}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault()
+              handleSubmit(event)
+            }
+          }}
         />
         <div className="chat-actions">
           <button type="submit" className="primary" disabled={isStreaming}>

@@ -5,19 +5,26 @@ import {
   chatWithModelStream,
   createMemory,
   deleteMemory,
+  exportMemories,
+  importMemories,
   listMemories,
   listModels,
+  listTags,
 } from '../lib/api'
 
 const initialLoading = {
   models: false,
   memories: false,
   chat: false,
+  tags: false,
+  export: false,
+  import: false,
 }
 
 export function useSynapseApi() {
   const [models, setModels] = useState([])
   const [memories, setMemories] = useState([])
+  const [tags, setTags] = useState([])
   const [loading, setLoading] = useState(initialLoading)
   const [error, setError] = useState(null)
 
@@ -48,9 +55,17 @@ export function useSynapseApi() {
   )
 
   const refreshMemories = useCallback(
-    withLoading('memories', async ({ query, tags, limit } = {}) => {
-      const response = await listMemories({ query, tags, limit })
+    withLoading('memories', async ({ query, tags: tagFilters, limit } = {}) => {
+      const response = await listMemories({ query, tags: tagFilters, limit })
       setMemories(response || [])
+    }),
+    [withLoading],
+  )
+
+  const refreshTags = useCallback(
+    withLoading('tags', async () => {
+      const response = await listTags()
+      setTags(response || [])
     }),
     [withLoading],
   )
@@ -59,17 +74,19 @@ export function useSynapseApi() {
     withLoading('memories', async (payload) => {
       const record = await createMemory(payload)
       setMemories((prev) => [record, ...prev])
+      refreshTags()
       return record
     }),
-    [withLoading],
+    [withLoading, refreshTags],
   )
 
   const removeMemory = useCallback(
     withLoading('memories', async (memoryId) => {
       await deleteMemory(memoryId)
       setMemories((prev) => prev.filter((memory) => memory.id !== memoryId))
+      refreshTags()
     }),
-    [withLoading],
+    [withLoading, refreshTags],
   )
 
   const sendChat = useCallback(
@@ -131,17 +148,38 @@ export function useSynapseApi() {
     [withLoading],
   )
 
+  const exportAllMemories = useCallback(
+    withLoading('export', async () => {
+      return exportMemories()
+    }),
+    [withLoading],
+  )
+
+  const importMemoryBatch = useCallback(
+    withLoading('import', async (payload) => {
+      const response = await importMemories(payload)
+      await refreshMemories()
+      refreshTags()
+      return response
+    }),
+    [withLoading, refreshMemories, refreshTags],
+  )
+
   return {
     models,
     memories,
+    tags,
     loading,
     error,
     refreshModels,
     refreshMemories,
+    refreshTags,
     addMemory,
     removeMemory,
     sendChat,
     streamChat,
+    exportAllMemories,
+    importMemoryBatch,
     setError,
   }
 }

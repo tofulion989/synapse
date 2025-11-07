@@ -62,6 +62,19 @@ class MemoryRecord(MemoryCreate):
     score: Optional[float] = Field(None, description="Optional similarity score when returned from search.")
 
 
+class MemoryImportRecord(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    content: str
+    tags: List[str] = Field(default_factory=list)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class MemoryImportRequest(BaseModel):
+    memories: List[MemoryImportRecord] = Field(default_factory=list)
+
+
 class ModelInfo(BaseModel):
     name: str
     provider: str

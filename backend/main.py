@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +11,14 @@ import json
 from .config import get_settings
 from .llm import LLMRouter
 from .memory import MemoryStore
-from .models import ChatRequest, ChatResponse, MemoryCreate, MemoryRecord, ModelInfo
+from .models import (
+    ChatRequest,
+    ChatResponse,
+    MemoryCreate,
+    MemoryImportRequest,
+    MemoryRecord,
+    ModelInfo,
+)
 
 app = FastAPI(title="Synapse Backend", version="0.1.0")
 api_router = APIRouter(prefix="/api", tags=["api"])
@@ -91,6 +99,31 @@ async def create_memory(
     store: MemoryStore = Depends(get_memory_store),
 ) -> MemoryRecord:
     return store.add_memory(payload)
+
+
+@api_router.get("/memories/tags")
+async def memory_tags(store: MemoryStore = Depends(get_memory_store)) -> List[dict]:
+    return store.list_tags()
+
+
+@api_router.get("/memories/export")
+async def export_memories(store: MemoryStore = Depends(get_memory_store)) -> dict:
+    records = store.export_memories()
+    return {
+        "exported_at": datetime.utcnow().isoformat() + "Z",
+        "count": len(records),
+        "memories": [record.model_dump(mode="json") for record in records],
+    }
+
+
+@api_router.post("/memories/import", response_model=List[MemoryRecord])
+async def import_memories(
+    payload: MemoryImportRequest,
+    store: MemoryStore = Depends(get_memory_store),
+) -> List[MemoryRecord]:
+    if not payload.memories:
+        raise HTTPException(status_code=400, detail="No memories provided for import.")
+    return store.import_memories(payload.memories)
 
 
 @api_router.delete("/memories/{memory_id}", status_code=204)

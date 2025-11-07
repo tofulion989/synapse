@@ -15,7 +15,7 @@ except ImportError:  # pragma: no cover - chromadb is an explicit dependency.
     Collection = None  # type: ignore
 
 from .config import Settings, get_settings
-from .models import MemoryCreate, MemoryRecord
+from .models import MemoryCreate, MemoryImportRecord, MemoryRecord
 
 
 def _timestamp() -> str:
@@ -110,6 +110,54 @@ class MemoryStore:
             updated_at=datetime.fromisoformat(now),
         )
 
+    def upsert_memory(self, record: MemoryImportRecord) -> MemoryRecord:
+        memory_id = record.id or uuid4().hex
+        created_at = record.created_at.isoformat() if isinstance(record.created_at, datetime) else record.created_at
+        updated_at = record.updated_at.isoformat() if isinstance(record.updated_at, datetime) else record.updated_at
+
+        now = _timestamp()
+        created = created_at or now
+        updated = updated_at or now
+        tags_serialised = _serialise_tags(record.tags)
+
+        with self._transaction() as cur:
+            cur.execute(
+                """
+                INSERT INTO memories (id, title, content, tags, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title=excluded.title,
+                    content=excluded.content,
+                    tags=excluded.tags,
+                    updated_at=excluded.updated_at
+                """,
+                (memory_id, record.title, record.content, tags_serialised, created, updated),
+            )
+
+        self._upsert_vector(
+            memory_id,
+            MemoryCreate(content=record.content, title=record.title, tags=record.tags),
+            metadata={"tags": tags_serialised},
+        )
+
+        return MemoryRecord(
+            id=memory_id,
+            title=record.title,
+            content=record.content,
+            tags=_deserialise_tags(tags_serialised),
+            created_at=datetime.fromisoformat(created),
+            updated_at=datetime.fromisoformat(updated),
+        )
+
+    def export_memories(self) -> List[MemoryRecord]:
+        return self.list_memories(limit=5000)
+
+    def import_memories(self, records: List[MemoryImportRecord]) -> List[MemoryRecord]:
+        imported: List[MemoryRecord] = []
+        for record in records:
+            imported.append(self.upsert_memory(record))
+        return imported
+
     def get_memory(self, memory_id: str) -> Optional[MemoryRecord]:
         with self._transaction() as cur:
             cur.execute("SELECT * FROM memories WHERE id = ?", (memory_id,))
@@ -142,6 +190,21 @@ class MemoryStore:
             rows = cur.fetchall()
 
         return [self._row_to_record(row) for row in rows]
+
+    def list_tags(self) -> List[dict]:
+        with self._transaction() as cur:
+            cur.execute("SELECT tags FROM memories")
+            rows = cur.fetchall()
+
+        counts = {}
+        for row in rows:
+            for tag in _deserialise_tags(row["tags"]):
+                counts[tag] = counts.get(tag, 0) + 1
+
+        return [
+            {"tag": tag, "count": counts[tag]}
+            for tag in sorted(counts, key=lambda t: counts[t], reverse=True)
+        ]
 
     def search_memories(
         self,

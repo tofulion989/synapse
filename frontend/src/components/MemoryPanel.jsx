@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 
 const placeholderTags = (tags = []) =>
@@ -7,10 +7,16 @@ const placeholderTags = (tags = []) =>
 export default function MemoryPanel({
   memories,
   selectedIds,
+  tags,
+  activeTags,
   onToggleMemory,
   onRefresh,
   onCreateMemory,
   onSearch,
+  onToggleTag,
+  onClearTags,
+  onExport,
+  onImport,
   searchQuery,
   loading,
 }) {
@@ -19,6 +25,7 @@ export default function MemoryPanel({
     content: '',
     tags: '',
   })
+  const fileInputRef = useRef(null)
 
   const isSelected = useMemo(() => new Set(selectedIds), [selectedIds])
 
@@ -48,19 +55,48 @@ export default function MemoryPanel({
     }
   }
 
+  const handleImportClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      await onImport?.(file)
+    } finally {
+      event.target.value = ''
+    }
+  }
+
   return (
     <section className="memory-panel">
       <header className="panel-header">
         <h2>Memory Spine</h2>
         <div className="panel-actions">
-          <button
-            type="button"
-            className="text-button"
-            onClick={onRefresh}
-            disabled={loading}
-          >
-            Refresh
-          </button>
+          <div className="memory-toolbar">
+            <button
+              type="button"
+              className="text-button"
+              onClick={onRefresh}
+              disabled={loading}
+            >
+              Refresh
+            </button>
+            <button type="button" className="text-button" onClick={onExport}>
+              Export
+            </button>
+            <button type="button" className="text-button" onClick={handleImportClick}>
+              Import
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json"
+              hidden
+              onChange={handleFileChange}
+            />
+          </div>
         </div>
       </header>
 
@@ -72,6 +108,32 @@ export default function MemoryPanel({
           onChange={(event) => onSearch?.(event.target.value)}
         />
       </div>
+
+      {tags.length > 0 && (
+        <div className="memory-tag-filters">
+          <div className="tag-filter-header">
+            <span>Tags</span>
+            {activeTags.length > 0 && (
+              <button type="button" className="text-button" onClick={onClearTags}>
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="tag-chip-row">
+            {tags.map(({ tag, count }) => (
+              <button
+                key={tag}
+                type="button"
+                className={`tag-chip ${activeTags.includes(tag) ? 'is-active' : ''}`}
+                onClick={() => onToggleTag?.(tag)}
+              >
+                {tag}
+                <span>{count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="memory-list">
         {loading && <p className="muted">Loading memories…</p>}
@@ -142,10 +204,21 @@ MemoryPanel.propTypes = {
     }),
   ),
   selectedIds: PropTypes.arrayOf(PropTypes.string),
+  tags: PropTypes.arrayOf(
+    PropTypes.shape({
+      tag: PropTypes.string.isRequired,
+      count: PropTypes.number.isRequired,
+    }),
+  ),
+  activeTags: PropTypes.arrayOf(PropTypes.string),
   onToggleMemory: PropTypes.func,
   onRefresh: PropTypes.func,
   onCreateMemory: PropTypes.func,
   onSearch: PropTypes.func,
+  onToggleTag: PropTypes.func,
+  onClearTags: PropTypes.func,
+  onExport: PropTypes.func,
+  onImport: PropTypes.func,
   searchQuery: PropTypes.string,
   loading: PropTypes.bool,
 }
@@ -153,6 +226,8 @@ MemoryPanel.propTypes = {
 MemoryPanel.defaultProps = {
   memories: [],
   selectedIds: [],
+  tags: [],
+  activeTags: [],
   searchQuery: '',
   loading: false,
 }

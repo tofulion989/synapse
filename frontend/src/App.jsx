@@ -28,30 +28,47 @@ const randomId = (prefix) => {
 }
 
 function App() {
+  const prefs =
+    typeof window !== 'undefined'
+      ? (() => {
+          try {
+            return JSON.parse(localStorage.getItem('synapse_prefs') || '{}')
+          } catch {
+            return {}
+          }
+        })()
+      : {}
+
   const {
     models,
     memories,
+    tags,
     loading,
     error,
     refreshModels,
     refreshMemories,
+    refreshTags,
     addMemory,
     sendChat,
     streamChat,
+    exportAllMemories,
+    importMemoryBatch,
     setError,
   } = useSynapseApi()
 
-  const [selectedMemoryIds, setSelectedMemoryIds] = useState([])
+  const [selectedMemoryIds, setSelectedMemoryIds] = useState(prefs.memoryIds || [])
   const [messages, setMessages] = useState(introMessages)
-  const [activeModel, setActiveModel] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [activeModel, setActiveModel] = useState(prefs.model || '')
+  const [searchQuery, setSearchQuery] = useState(prefs.search || '')
+  const [activeTags, setActiveTags] = useState(prefs.tags || [])
   const [statusMessage, setStatusMessage] = useState(null)
   const controllerRef = useRef(null)
 
   useEffect(() => {
     refreshModels()
-    refreshMemories()
-  }, [refreshModels, refreshMemories])
+    refreshMemories({ query: searchQuery, tags: activeTags })
+    refreshTags()
+  }, [refreshModels, refreshMemories, refreshTags])
 
   useEffect(() => {
     if (!models.length) return
@@ -64,10 +81,10 @@ function App() {
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      refreshMemories({ query: searchQuery })
+      refreshMemories({ query: searchQuery, tags: activeTags })
     }, 300)
     return () => clearTimeout(timeout)
-  }, [searchQuery, refreshMemories])
+  }, [searchQuery, activeTags, refreshMemories])
 
   useEffect(() => {
     setSelectedMemoryIds((previous) =>
@@ -75,12 +92,29 @@ function App() {
     )
   }, [memories])
 
+  useEffect(() => {
+    setActiveTags((previous) =>
+      previous.filter((tag) => tags.some((entry) => entry.tag === tag)),
+    )
+  }, [tags])
+
   useEffect(
     () => () => {
       controllerRef.current?.abort()
     },
     [],
   )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const payload = {
+      model: activeModel,
+      memoryIds: selectedMemoryIds,
+      search: searchQuery,
+      tags: activeTags,
+    }
+    localStorage.setItem('synapse_prefs', JSON.stringify(payload))
+  }, [activeModel, selectedMemoryIds, searchQuery, activeTags])
 
   const selectedMemories = useMemo(
     () => memories.filter((memory) => selectedMemoryIds.includes(memory.id)),
@@ -234,6 +268,51 @@ function App() {
     }
   }
 
+  const handleToggleTag = (tag) => {
+    setActiveTags((prev) =>
+      prev.includes(tag) ? prev.filter((entry) => entry !== tag) : [...prev, tag],
+    )
+  }
+
+  const handleExportMemories = async () => {
+    try {
+      const payload = await exportAllMemories()
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: 'application/json',
+      })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `synapse-memories-${new Date().toISOString()}.json`
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
+      URL.revokeObjectURL(url)
+      setStatusMessage(`Exported ${payload.count ?? payload.memories?.length ?? 0} memories.`)
+    } catch (err) {
+      setError(err.message || 'Export failed')
+    }
+  }
+
+  const handleImportMemories = async (file) => {
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      const memoriesPayload = Array.isArray(data)
+        ? data
+        : Array.isArray(data.memories)
+        ? data.memories
+        : null
+      if (!memoriesPayload) {
+        throw new Error('File must contain a memories array.')
+      }
+      await importMemoryBatch({ memories: memoriesPayload })
+      setStatusMessage(`Imported ${memoriesPayload.length} memories.`)
+    } catch (err) {
+      setError(err.message || 'Import failed')
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
@@ -249,6 +328,8 @@ function App() {
         <MemoryPanel
           memories={memories}
           selectedIds={selectedMemoryIds}
+          tags={tags}
+          activeTags={activeTags}
           searchQuery={searchQuery}
           onSearch={setSearchQuery}
           onToggleMemory={(memoryId) =>
@@ -258,8 +339,12 @@ function App() {
                 : [...previous, memoryId],
             )
           }
-          onRefresh={() => refreshMemories({ query: searchQuery })}
+          onRefresh={() => refreshMemories({ query: searchQuery, tags: activeTags })}
           onCreateMemory={handleCreateMemory}
+          onToggleTag={handleToggleTag}
+          onClearTags={() => setActiveTags([])}
+          onExport={handleExportMemories}
+          onImport={handleImportMemories}
           loading={loading.memories}
         />
       </aside>
