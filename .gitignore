@@ -31,3 +31,7 @@ data/synapse.db
 *.log
 .DS_Store
 *.zip
+
+# Ignore Codex snapshots
+codex_snapshot_*.json
+
