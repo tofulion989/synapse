@@ -34,6 +34,7 @@ class LLMRouter:
         self.ollama_status = "unknown"
         self._model_cache_data: Optional[ModelListResponse] = None
         self._model_cache_time: float = 0.0
+        self.model_meta = self._load_model_meta()
         self._probe_ollama(initial=True)
 
     @property
@@ -61,6 +62,7 @@ class LLMRouter:
                 name=f"ollama/{tag}",
                 provider="ollama",
                 source="local",
+                model_id=tag,
             )
             for tag in self.ollama_tags
         ]
@@ -385,6 +387,21 @@ class LLMRouter:
         self._save_model_prefs()
         self._model_cache_data = None
 
+    def _load_model_meta(self) -> Dict[str, Dict[str, Any]]:
+        meta_dir = Path(__file__).resolve().parent / "config" / "models"
+        meta: Dict[str, Dict[str, Any]] = {}
+        if not meta_dir.exists():
+            return meta
+        for path in meta_dir.glob("*.json"):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                provider = path.stem
+                if isinstance(data, list):
+                    meta[provider] = {entry["id"]: entry for entry in data if "id" in entry}
+            except Exception as exc:
+                logging.warning("Failed to load model metadata from %s: %s", path, exc)
+        return meta
+
     def _probe_ollama(self, initial: bool = False) -> None:
         endpoints = [self.settings.ollama_base_url.rstrip("/"), "http://127.0.0.1:11434"]
         attempts = len(endpoints) if initial else 1
@@ -420,9 +437,27 @@ class LLMRouter:
         if not key:
             return "no_key", []
 
-        # Placeholder: rely on known allowlists; a real impl would list via provider API.
+        meta_entries = self.model_meta.get(provider, {})
+        if provider == "openai" and meta_entries:
+            models = []
+            for model_id, meta in meta_entries.items():
+                models.append(
+                    ModelMetadata(
+                        name=f"openai/{model_id}",
+                        provider=provider,
+                        source="cloud",
+                        model_id=model_id,
+                        ctx=meta.get("context"),
+                        description=meta.get("description"),
+                        cost_tier=meta.get("cost_tier"),
+                        type=meta.get("type"),
+                        cost_per_1k=None,
+                        model_status="ok",
+                    )
+                )
+            return ("ok", models) if models else ("no_models", [])
+
         allowlists = {
-            "openai": ["openai/gpt-4o", "openai/gpt-4o-mini"],
             "anthropic": ["anthropic/claude-3-5-sonnet"],
             "groq": ["groq/llama-3.1-70b"],
         }

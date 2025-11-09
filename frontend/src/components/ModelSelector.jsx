@@ -22,12 +22,38 @@ export default function ModelSelector({
     [models],
   )
 
+  const typeOrder = {
+    reasoning: 0,
+    'chat/general': 1,
+    'multimodal': 2,
+    'multimodal-fast': 3,
+    embedding: 4,
+    image: 5,
+    transcription: 6,
+    speech: 7,
+    legacy: 8,
+  }
+
+  const costClassMap = {
+    $$$: 'cost-tier-high',
+    $$: 'cost-tier-mid',
+    $: 'cost-tier-low',
+  }
+
+  const sortModels = (list) =>
+    [...list].sort((a, b) => {
+      const aType = typeOrder[a.type] ?? 99
+      const bType = typeOrder[b.type] ?? 99
+      if (aType !== bType) return aType - bType
+      return a.name.localeCompare(b.name)
+    })
+
   const localModels = useMemo(
-    () => validModels.filter((model) => model.provider === 'ollama'),
+    () => sortModels(validModels.filter((model) => model.provider === 'ollama')),
     [validModels],
   )
   const cloudModels = useMemo(
-    () => validModels.filter((model) => model.provider !== 'ollama'),
+    () => sortModels(validModels.filter((model) => model.provider !== 'ollama')),
     [validModels],
   )
 
@@ -71,10 +97,17 @@ export default function ModelSelector({
               key={model.name}
               className={model.name === selectedModel ? 'is-active' : ''}
               onClick={() => handleSelect(model.name)}
-              title={`${model.provider} • ${model.source}`}
+              title={model.description || `${model.provider} • ${model.source}`}
             >
-              <span>{model.name}</span>
-              <span className="provider">{model.provider}</span>
+              <span>{model.model_id || model.name}</span>
+              <span className="provider">{model.type || model.provider}</span>
+              <span
+                className={`cost-tag ${
+                  costClassMap[model.cost_tier] || 'cost-tier-na'
+                }`}
+              >
+                {model.cost_tier || '?'}
+              </span>
             </li>
           ))
         )}

@@ -1,0 +1,88 @@
+[
+  {
+    "id": "gpt-5",
+    "name": "GPT-5",
+    "type": "reasoning",
+    "context": 400000,
+    "description": "Flagship OpenAI model with full reasoning depth, multimodal capability, and very large context window.",
+    "cost_tier": "$$$",
+    "provider": "openai"
+  },
+  {
+    "id": "gpt-5-mini",
+    "name": "GPT-5 Mini",
+    "type": "chat/general",
+    "context": 128000,
+    "description": "Smaller, faster GPT-5 variant with balanced cost-performance for general use.",
+    "cost_tier": "$$",
+    "provider": "openai"
+  },
+  {
+    "id": "gpt-4o",
+    "name": "GPT-4 Omni",
+    "type": "multimodal",
+    "context": 128000,
+    "description": "Multimodal GPT-4 capable of processing text, images, and audio with high reasoning accuracy.",
+    "cost_tier": "$$",
+    "provider": "openai"
+  },
+  {
+    "id": "gpt-4o-mini",
+    "name": "GPT-4o Mini",
+    "type": "multimodal-fast",
+    "context": 64000,
+    "description": "Cost-efficient multimodal variant optimized for chat and visual tasks.",
+    "cost_tier": "$",
+    "provider": "openai"
+  },
+  {
+    "id": "gpt-4.1",
+    "name": "GPT-4.1",
+    "type": "reasoning",
+    "context": 128000,
+    "description": "Advanced GPT-4 series model with higher reasoning and improved efficiency.",
+    "cost_tier": "$$",
+    "provider": "openai"
+  },
+  {
+    "id": "gpt-3.5-turbo",
+    "name": "GPT-3.5 Turbo",
+    "type": "legacy",
+    "context": 16000,
+    "description": "Lightweight, legacy GPT model for inexpensive chat and tagging workloads.",
+    "cost_tier": "$",
+    "provider": "openai"
+  },
+  {
+    "id": "text-embedding-3-large",
+    "name": "Text Embedding 3 Large",
+    "type": "embedding",
+    "description": "High-accuracy embedding model for semantic memory, search, and similarity tasks.",
+    "cost_tier": "$$",
+    "provider": "openai"
+  },
+  {
+    "id": "whisper-1",
+    "name": "Whisper 1",
+    "type": "transcription",
+    "description": "Speech-to-text transcription model supporting multiple languages.",
+    "cost_tier": "$",
+    "provider": "openai"
+  },
+  {
+    "id": "gpt-image-1",
+    "name": "DALL-E 3 Image",
+    "type": "image",
+    "description": "Image generation model supporting text-to-image and inpainting capabilities.",
+    "cost_tier": "$$",
+    "provider": "openai"
+  },
+  {
+    "id": "tts-1-hd",
+    "name": "TTS 1 HD",
+    "type": "speech",
+    "description": "High-definition text-to-speech model with natural, expressive voice output.",
+    "cost_tier": "$",
+    "provider": "openai"
+  }
+]

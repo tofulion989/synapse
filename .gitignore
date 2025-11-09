@@ -1,18 +1,33 @@
-# venv & caches
+# environments & secrets
+.env
+*.key
+*.pem
+*.json
+!backend/config/**/*.json
+!frontend/**/*.json
+
+# virtual environments
 .venv/
+venv/
+
+# python cache
 __pycache__/
+pycache/
 *.pyc
 
-# node
+# node modules & build output
 frontend/node_modules/
 frontend/dist/
 
-# local data
+# local data & databases
+/data/
+*.db
+*.sqlite
 data/vector_store/
 data/conversations/
 data/synapse.db
 
-# env & OS junk
-.env
+# logs & os junk
 *.log
 .DS_Store
+*.zip

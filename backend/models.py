@@ -83,11 +83,15 @@ class ModelMetadata(BaseModel):
     name: str
     provider: str
     source: str
+    model_id: Optional[str] = None
     ctx: Optional[int] = None
     available: bool = True
     model_status: str = "ok"
     cost_per_1k: Optional[float] = None
     enabled: bool = True
+    description: Optional[str] = None
+    type: Optional[str] = None
+    cost_tier: Optional[str] = None
 
 
 class ProviderStatus(BaseModel):
