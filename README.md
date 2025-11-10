@@ -20,6 +20,8 @@
 Synapse is a **model-agnostic AI command console** that integrates local and cloud models (OpenAI, Ollama, Groq, Anthropic, etc.) through a unified FastAPI backend and React-based frontend. It provides total human control over memory and context, allowing seamless switching between models while maintaining a consistent, local memory layer.
 
 > **Current Release:** v0.7.0 (previous stable: v0.6.6 — see [CHANGELOG](CHANGELOG.md))
+>
+> **Latest Update:** Critical bug fixes and code improvements (November 2025) - See [Recent Fixes](#recent-fixes)
 
 ### Core Philosophy
 
@@ -193,8 +195,14 @@ ANTHROPIC_API_KEY=your_anthropic_api_key_here
 # Groq Configuration (optional)
 GROQ_API_KEY=your_groq_api_key_here
 
-# Default Model (optional)
-DEFAULT_MODEL=gpt-4-turbo
+# Model Configuration (optional)
+DEFAULT_MODEL=ollama/mistral           # Default chat model
+SUMMARY_MODEL=openai/gpt-4o            # Model for memory summarization
+ANALYSIS_MODEL=openai/gpt-4o           # Model for memory analysis
+
+# Advanced Configuration (optional)
+LITELLM_API_BASE=                      # Custom LiteLLM API base URL
+DATA_ROOT=./data                       # Data storage directory
 ```
 
 **Important:** Never commit the `.env` file to version control!
@@ -383,6 +391,20 @@ MEMORY_MANUAL_DIR = Path("data/memories/manual")
 CONVERSATION_DIR = Path("data/conversations")
 ```
 
+### Environment Variables Reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | - | OpenAI API key for GPT models |
+| `ANTHROPIC_API_KEY` | - | Anthropic API key for Claude models |
+| `GROQ_API_KEY` | - | Groq API key for fast inference |
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama server endpoint |
+| `DEFAULT_MODEL` | `ollama/mistral` | Default model for chat |
+| `SUMMARY_MODEL` | `openai/gpt-4o` | Model for memory summarization |
+| `ANALYSIS_MODEL` | `openai/gpt-4o` | Model for memory analysis |
+| `LITELLM_API_BASE` | - | Custom LiteLLM API base URL |
+| `DATA_ROOT` | `./data` | Root directory for data storage |
+
 ---
 
 ## Development
@@ -538,6 +560,24 @@ For issues, questions, or suggestions:
 
 - **GitHub Issues:** [Create an issue](https://github.com/yourusername/synapse/issues)
 - **Discussions:** [Join the discussion](https://github.com/yourusername/synapse/discussions)
+
+---
+
+## Recent Fixes
+
+### November 2025 - Critical Bug Fixes
+
+Recent code audit identified and fixed several critical issues:
+
+**Critical Fixes:**
+- **Removed duplicate code** in `backend/llm.py` that was causing potential runtime errors
+- **Added missing import** (`MemoryStore`) in `backend/main.py` for proper type checking
+
+**High Priority Improvements:**
+- **Improved cosine similarity calculation** in `backend/memory.py` with better zero-vector handling
+- **Configured summary model** in `backend/services/summary.py` to respect `SUMMARY_MODEL` environment variable
+
+**Impact:** All Python files now compile successfully with no syntax errors. The codebase is more robust and properly configured.
 
 ---
 
