@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.7.1] - 2025-11-09
+### Fixed
+- Removed duplicate `build_context` and `_cloud_models_for` definitions in `llm.py`.
+- Corrected imports for `MemoryStore` in `main.py`.
+- Hardened cosine similarity helpers to avoid division-by-zero.
+- Ensure summary generation uses `settings.summary_model` for flexibility.
+
+### Improved
+- Code consistency and runtime safety across backend modules.
+- Prepared backend surface for Phase 4 UI upgrades and LAN deployment.
+
 ## [v0.7.0] - 2025-11-10
 ### Added
 - Restored `_cloud_models_for` in `LLMRouter` to fix `/api/models` endpoint.

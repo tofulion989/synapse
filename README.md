@@ -50,3 +50,10 @@ Then open [http://localhost:5175](http://localhost:5175).
 ## License
 
 MIT License © 2025 Timmy Thomas
+
+---
+
+### Recent Updates
+**v0.7.1 — November 2025**
+- Backend cleanup and improved config architecture
+- Verified build stability on Pop!_OS + FastAPI + React/Vite stack
