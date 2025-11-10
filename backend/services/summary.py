@@ -1,25 +1,30 @@
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 try:  # pragma: no cover
     from litellm import completion
 except ImportError:  # pragma: no cover
     completion = None
 
-DEFAULT_MODEL = "gpt-4o-mini"
+from ..config import get_settings
 
 
-def summarize(text: str, model: str = DEFAULT_MODEL) -> str:
+def summarize(text: str, model: Optional[str] = None) -> str:
     """Return a concise summary for long memories."""
     if not text:
         return ""
     if len(text) < 500 or completion is None:
         return text
+
+    settings = get_settings()
+    actual_model = model or settings.summary_model
+
     prompt = f"Summarize this memory in <= 100 words while preserving concrete facts:\n\n{text}"
     try:
         response = completion(
-            model=model,
+            model=actual_model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=220,
             temperature=0,

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 import json
 
 from .llm import LLMRouter
+from .memory import MemoryStore
 from .dependencies import get_llm_router, get_memory_store, settings
 from .services.injection import build_context
 from .routes.memory_routes import router as memory_router

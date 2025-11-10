@@ -552,6 +552,11 @@ class MemoryStore:
         return [value / length for value in vector]
 
     def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
-        return sum(x * y for x, y in zip(a, b)) / (
-            (sum(x * x for x in a) ** 0.5 or 1.0) * (sum(y * y for y in b) ** 0.5 or 1.0)
-        )
+        dot_product = sum(x * y for x, y in zip(a, b))
+        mag_a = sum(x * x for x in a) ** 0.5
+        mag_b = sum(y * y for y in b) ** 0.5
+
+        if mag_a == 0.0 or mag_b == 0.0:
+            return 0.0
+
+        return dot_product / (mag_a * mag_b)
