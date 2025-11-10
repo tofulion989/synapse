@@ -1,5 +1,7 @@
 # Synapse — Unified AI Command Console
 
+> Specification version: **v0.7.0** (baseline reference: **v0.6.6**)
+
 ## Overview
 Synapse is a model-agnostic, locally anchored AI command console designed for total human control over memory and context. It allows seamless switching between models (local and cloud) while maintaining a consistent, local memory layer.
 

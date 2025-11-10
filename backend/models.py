@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, Field, validator
@@ -31,6 +32,7 @@ class ChatRequest(BaseModel):
     inject_memories: bool = Field(True, description="If false, do not prepend memory content to the prompt.")
     stream: bool = Field(False, description="Enable streaming responses (future enhancement).")
     system: Optional[str] = Field(None, description="Optional system prompt prepended before context.")
+    auto_suggest: bool = Field(False, description="If true, use AI suggestions for relevant memories.")
 
 
 class ChatResponse(BaseModel):
@@ -40,12 +42,32 @@ class ChatResponse(BaseModel):
     used_memories: List[str] = Field(default_factory=list)
     placeholder: bool = False
     stats: Optional["UsageStats"] = None
+    context_preview: Optional[str] = Field(None, description="Human-readable view of injected context.")
+
+
+class MemoryCategory(str, Enum):
+    general = "general"
+    project = "project"
+    idea = "idea"
+    experiment = "experiment"
+    note = "note"
+    other = "other"
+
+
+class MemoryIntent(str, Enum):
+    inform = "inform"
+    query = "query"
+    warn = "warn"
+    inspire = "inspire"
 
 
 class MemoryCreate(BaseModel):
     content: str = Field(..., description="Core memory text snippet.")
     title: Optional[str] = Field(None, description="Optional short label for the memory.")
     tags: List[str] = Field(default_factory=list, description="Keyword tags (e.g. #project, #idea).")
+    category: MemoryCategory = Field(MemoryCategory.general, description="Structured category for filtering.")
+    intent: MemoryIntent = Field(MemoryIntent.inform, description="Intent describing why this memory exists.")
+    summary: Optional[str] = Field(None, description="Optional short summary used for future vector prompts.")
 
     @validator("tags", each_item=True)
     def _normalise_tag(cls, tag: str) -> str:
@@ -70,6 +92,9 @@ class MemoryImportRecord(BaseModel):
     title: Optional[str] = None
     content: str
     tags: List[str] = Field(default_factory=list)
+    category: Optional[MemoryCategory] = None
+    intent: Optional[MemoryIntent] = None
+    summary: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     source: Optional[str] = None
@@ -77,6 +102,11 @@ class MemoryImportRecord(BaseModel):
 
 class MemoryImportRequest(BaseModel):
     memories: List[MemoryImportRecord] = Field(default_factory=list)
+
+
+class MemoryAutoSuggestRequest(BaseModel):
+    query: str = Field(..., description="Text used to search for similar memories.", min_length=1)
+    k: int = Field(5, ge=1, le=20, description="Maximum number of results to return.")
 
 
 class ModelMetadata(BaseModel):
@@ -92,6 +122,8 @@ class ModelMetadata(BaseModel):
     description: Optional[str] = None
     type: Optional[str] = None
     cost_tier: Optional[str] = None
+    category: Optional[str] = None
+    vram_mb: Optional[int] = None
 
 
 class ProviderStatus(BaseModel):

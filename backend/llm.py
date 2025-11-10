@@ -5,10 +5,14 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, Mapping, Sequence, Union, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Sequence, Union, List, Optional, Tuple
 
 import requests
 from litellm import completion, model_cost, token_counter
+try:  # pragma: no cover - optional dependency
+    from openai import OpenAI
+except ImportError:  # pragma: no cover
+    OpenAI = None
 
 from .config import Settings, get_settings
 from .models import (
@@ -19,6 +23,9 @@ from .models import (
     ModelPreference,
     ProviderStatus,
 )
+
+if TYPE_CHECKING:
+    from .memory import MemoryStore
 
 
 class LLMRouter:
@@ -63,6 +70,8 @@ class LLMRouter:
                 provider="ollama",
                 source="local",
                 model_id=tag,
+                type="local",
+                description=f"Local Ollama model {tag}",
             )
             for tag in self.ollama_tags
         ]
@@ -432,6 +441,100 @@ class LLMRouter:
                 time.sleep(1)
         self.ollama_online = False
         self.ollama_status = "unreachable"
+
+    def _cloud_models_for(self, provider: str) -> Tuple[str, List[ModelMetadata]]:
+        provider = (provider or "").strip().lower()
+        try:
+            if provider == "openai":
+                if "openai" not in self.settings.provider_keys:
+                    return ("no_key", [])
+                if OpenAI is None:
+                    logging.warning("[LLMRouter] openai package unavailable; skipping OpenAI models.")
+                    return ("missing_client", [])
+                client = OpenAI()
+                response = client.models.list()
+                models: List[ModelMetadata] = []
+                for item in getattr(response, "data", []):
+                    model_id = getattr(item, "id", None)
+                    if not model_id:
+                        continue
+                    meta_entry = self.model_meta.get("openai", {}).get(model_id, {})
+                    models.append(
+                        ModelMetadata(
+                            name=f"openai/{model_id}",
+                            provider="openai",
+                            source="cloud",
+                            model_id=model_id,
+                            description=meta_entry.get("description"),
+                            type=meta_entry.get("type") or "cloud",
+                            ctx=meta_entry.get("context"),
+                            cost_tier=meta_entry.get("cost_tier"),
+                        )
+                    )
+                return ("ok", models)
+
+            if provider == "ollama":
+                endpoint = self.settings.ollama_base_url.rstrip("/") + "/api/tags"
+                response = requests.get(endpoint, timeout=3)
+                response.raise_for_status()
+                payload = response.json()
+                models: List[ModelMetadata] = []
+                for model in payload.get("models", []):
+                    tag = model.get("name") or model.get("tag")
+                    if not tag:
+                        continue
+                    models.append(
+                        ModelMetadata(
+                            name=f"ollama/{tag}",
+                            provider="ollama",
+                            source="local",
+                            model_id=tag,
+                            type="local",
+                            description=f"Local Ollama model {tag}",
+                        )
+                    )
+                return ("ok", models)
+
+            return ("unsupported", [])
+        except Exception as exc:  # pragma: no cover
+            logging.warning("[LLMRouter] Failed to load %s models: %s", provider or "unknown", exc)
+            return ("error", [])
+
+
+def build_context(
+    selected_memories: Sequence[MemoryRecord],
+    query: Optional[str],
+    *,
+    use_vectors: bool = False,
+    store: Optional["MemoryStore"] = None,
+) -> Tuple[str, List[str]]:
+    """Return a context string and the IDs referenced within it."""
+    if use_vectors:
+        if not store or not query:
+            return "", []
+        vector_matches = store.auto_suggest(query, limit=5)
+        if not vector_matches:
+            return "", []
+        summaries: List[str] = []
+        for memory in vector_matches:
+            snippet = memory.summary or (memory.content[:200] if memory.content else "")
+            if snippet:
+                summaries.append(snippet.strip())
+        if not summaries:
+            return "", []
+        context = "Relevant Memory Summaries:\n" + "\n".join(f"- {summary}" for summary in summaries)
+        return context, [memory.id for memory in vector_matches]
+
+    if not selected_memories:
+        return "", []
+
+    structured = [
+        {"category": memory.category, "intent": memory.intent, "content": memory.content}
+        for memory in selected_memories
+    ]
+    return f"Relevant Memories (JSON): {json.dumps(structured, ensure_ascii=False)}", [
+        memory.id for memory in selected_memories
+    ]
     def _cloud_models_for(self, provider: str) -> Tuple[str, List[ModelMetadata]]:
         key = self.settings.provider_keys.get(provider)
         if not key:
@@ -450,7 +553,9 @@ class LLMRouter:
                         ctx=meta.get("context"),
                         description=meta.get("description"),
                         cost_tier=meta.get("cost_tier"),
-                        type=meta.get("type"),
+                        type="cloud",
+                        category=meta.get("type"),
+                        vram_mb=meta.get("vram_mb"),
                         cost_per_1k=None,
                         model_status="ok",
                     )
@@ -470,6 +575,7 @@ class LLMRouter:
                 name=model,
                 provider=provider,
                 source="cloud",
+                type="cloud",
             )
             for model in models
         ]

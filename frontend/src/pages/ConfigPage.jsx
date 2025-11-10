@@ -125,6 +125,56 @@ export default function ConfigPage({
           </span>
         ))}
       </div>
+      {models.length > 0 && (
+        <section className="model-stats">
+          <h2>Model Stats</h2>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                <tr>
+                  <th scope="col" className="px-4 py-2 text-left">
+                    Model
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-left">
+                    Provider
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-left">
+                    VRAM (MB)
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-left">
+                    Cost / 1K
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-left">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {models
+                  .slice()
+                  .sort((a, b) => a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name))
+                  .map((model) => (
+                    <tr key={model.name} className="bg-white dark:bg-slate-900">
+                      <td className="px-4 py-2 font-medium text-slate-900 dark:text-slate-100">
+                        {model.model_id || model.name}
+                      </td>
+                      <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{model.provider || '—'}</td>
+                      <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
+                        {model.vram_mb != null ? model.vram_mb : 'Shared'}
+                      </td>
+                      <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
+                        {model.cost_per_1k ? `$${model.cost_per_1k}` : '—'}
+                      </td>
+                      <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
+                        {model.model_status || 'unknown'}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
       {loading && <p>Loading models…</p>}
       <div className="config-groups">
         {Object.entries(grouped).map(([provider, list]) => (

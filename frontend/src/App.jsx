@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 
 import ChatPanel from './components/ChatPanel'
+import Header from './components/Header'
 import MemoryPanel from './components/MemoryPanel'
-import ModelSelector from './components/ModelSelector'
-import ConfigPage from './pages/Config'
+import ModelModal from './components/ModelModal'
+import Sidebar from './components/Sidebar'
 import { useSynapseApi } from './hooks/useSynapseApi'
+
+const ConfigPage = lazy(() => import('./pages/ConfigPage'))
 
 const randomId = (prefix) => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -67,13 +70,48 @@ function App() {
   const [summaryResult, setSummaryResult] = useState(null)
   const [contradictionReport, setContradictionReport] = useState(null)
   const controllerRef = useRef(null)
-  const handleOpenConfig = () => setActiveView('config')
+  const [theme, setTheme] = useState('light')
+  const [activeView, setActiveView] = useState('workspace')
+  const [autoSuggest, setAutoSuggest] = useState(prefs.autoSuggest ?? false)
+  const [contextPreview, setContextPreview] = useState('')
+  const [modelModalOpen, setModelModalOpen] = useState(false)
+  const modelButtonRef = useRef(null)
+  const [showSidebar, setShowSidebar] = useState(() => {
+    if (typeof window === 'undefined') return true
+    const stored = localStorage.getItem('synapse_sidebar_open')
+    if (stored === null) return true
+    return stored === '1'
+  })
+  const handleOpenConfig = () => {
+    setActiveView('config')
+    setShowSidebar(false)
+  }
   const handleCloseConfig = () => setActiveView('workspace')
   const handleSavePreferences = async (preferences) => {
     await updateModelPreferences(preferences)
     refreshModels({ force: true })
   }
-  const [activeView, setActiveView] = useState('workspace')
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const storedTheme = localStorage.getItem('theme') || 'light'
+    const storedModel = localStorage.getItem('selectedModel')
+    setTheme(storedTheme)
+    if (storedModel) {
+      setActiveModel(storedModel)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    document.documentElement.setAttribute('data-theme', theme)
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('synapse_sidebar_open', showSidebar ? '1' : '0')
+  }, [showSidebar])
 
   useEffect(() => {
     refreshModels()
@@ -84,7 +122,9 @@ function App() {
   useEffect(() => {
     if (!models.length) return
     setActiveModel((current) => {
-      if (current) return current
+      if (current && models.some((model) => model.name === current)) {
+        return current
+      }
       const preferred = models.find((model) => model.default)
       return preferred?.name ?? models[0].name
     })
@@ -93,6 +133,12 @@ function App() {
   useEffect(() => {
     setStats(null)
   }, [activeModel, setStats])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!activeModel) return
+    localStorage.setItem('selectedModel', activeModel)
+  }, [activeModel])
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -149,6 +195,7 @@ function App() {
       systemPrompt,
       showSystemPrompt,
       showStatsDetails,
+      autoSuggest,
     }
     localStorage.setItem('synapse_prefs', JSON.stringify(payload))
   }, [
@@ -159,6 +206,7 @@ function App() {
     systemPrompt,
     showSystemPrompt,
     showStatsDetails,
+    autoSuggest,
   ])
 
   const selectedMemories = useMemo(
@@ -170,6 +218,7 @@ function App() {
     const trimmed = text.trim()
     if (!trimmed) return
     controllerRef.current?.abort()
+    setContextPreview('')
 
     const userMessage = {
       id: randomId('msg'),
@@ -200,6 +249,7 @@ function App() {
       model: activeModel || undefined,
       include_memories: selectedMemoryIds,
       system: systemPrompt || undefined,
+      auto_suggest: autoSuggest,
     }
 
     try {
@@ -226,6 +276,9 @@ function App() {
               }
               if (Array.isArray(event.used_memories) && event.used_memories.length > 0) {
                 setSelectedMemoryIds(event.used_memories)
+              }
+              if (event.context_preview !== undefined) {
+                setContextPreview(event.context_preview || '')
               }
               const label = event.placeholder
                 ? 'Placeholder response generated locally.'
@@ -291,6 +344,7 @@ function App() {
             ? `Response served by ${response.provider} (${response.model})`
             : `Response served by ${response.model}`,
         )
+        setContextPreview(response.context_preview || '')
       } catch (fallbackError) {
         setMessages((prev) =>
           prev.map((message) =>
@@ -306,8 +360,13 @@ function App() {
   }
 
   const handleCreateMemory = async (payload) => {
+    const enrichedPayload = {
+      ...payload,
+      category: payload.category || 'note',
+      intent: payload.intent || 'inform',
+    }
     try {
-      const record = await addMemory(payload)
+      const record = await addMemory(enrichedPayload)
       setSelectedMemoryIds((prev) => [record.id, ...prev])
       setStatusMessage('Memory saved.')
     } catch (_err) {
@@ -319,6 +378,14 @@ function App() {
     setSelectedMemoryIds((prev) =>
       prev.includes(memoryId) ? prev : [memoryId, ...prev],
     )
+  }
+
+  const handleSelectAllMemories = (selectAll) => {
+    if (selectAll) {
+      setSelectedMemoryIds(memories.map((memory) => memory.id))
+      return
+    }
+    setSelectedMemoryIds([])
   }
 
   const handleToggleTag = (tag) => {
@@ -427,117 +494,148 @@ function App() {
     }
   }
 
-  const handleOpenSettings = () => {
-    document
-      .querySelector('[data-settings-panel]')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const handleSelectModel = (model) => {
+    setActiveModel(model)
+    setStatusMessage(model ? `Model switched to ${model}` : 'Using default routing')
+  }
+
+  const closeModelModal = () => {
+    setModelModalOpen(false)
+    requestAnimationFrame(() => {
+      modelButtonRef.current?.focus()
+    })
   }
 
   return (
-    <div className="app-shell">
-      <aside className="app-sidebar">
-        <div className="sidebar-nav">
-          <button
-            type="button"
-            className={activeView === 'workspace' ? 'is-active' : ''}
-            onClick={() => setActiveView('workspace')}
-          >
-            Workspace
-          </button>
-          <button
-            type="button"
-            className={activeView === 'config' ? 'is-active' : ''}
-            onClick={handleOpenConfig}
-          >
-            Settings
-          </button>
-        </div>
-        <ModelSelector
-          models={models}
+    <div className="flex h-screen flex-col overflow-hidden bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+      <Header
+        onToggleSidebar={() => setShowSidebar((prev) => !prev)}
+        isSidebarOpen={showSidebar}
+        activeView={activeView}
+        onSelectView={(view) => {
+          if (view === 'config') {
+            handleOpenConfig()
+          } else {
+            handleCloseConfig()
+          }
+        }}
+        onThemeChange={setTheme}
+      />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          isOpen={showSidebar}
+          onClose={() => setShowSidebar(false)}
+          activeModel={activeModel}
+          onOpenConfig={handleOpenConfig}
+          onOpenModelModal={() => setModelModalOpen(true)}
+          isModelModalOpen={modelModalOpen}
+          modelButtonRef={modelButtonRef}
           providerStatus={providerStatus}
           ollamaStatus={ollamaStatus}
-          activeModel={activeModel}
-          onSelect={(model) => {
-            setActiveModel(model)
-            setStatusMessage(`Model switched to ${model}`)
-          }}
-          disabled={loading.chat}
-          onOpenSettings={handleOpenSettings}
-          onRetry={refreshModels}
-        />
-        <MemoryPanel
-          memories={memories}
-          selectedIds={selectedMemoryIds}
+          onRefreshModels={() => refreshModels({ force: true })}
+          statusMessage={statusMessage}
+          error={error}
           tags={tags}
           activeTags={activeTags}
-          suggestions={suggestions}
-          searchQuery={searchQuery}
-          onSearch={setSearchQuery}
-          onToggleMemory={(memoryId) =>
-            setSelectedMemoryIds((previous) =>
-              previous.includes(memoryId)
-                ? previous.filter((id) => id !== memoryId)
-                : [...previous, memoryId],
-            )
-          }
-          onRefresh={() => refreshMemories({ query: searchQuery, tags: activeTags })}
-          onCreateMemory={handleCreateMemory}
           onToggleTag={handleToggleTag}
           onClearTags={() => setActiveTags([])}
-          onExport={handleExportMemories}
-          onImport={handleImportMemories}
-          onApproveSuggestion={handleApproveSuggestion}
           onCheckDuplicates={handleCheckDuplicates}
-          duplicateGroups={duplicates}
-          onMergeDuplicates={handleMergeDuplicates}
           onCheckContradictions={handleContradictionCheck}
-          contradictionReport={contradictionReport}
-          onOpenConfig={handleOpenConfig}
-          loading={loading.memories}
         />
-      </aside>
-      <main className="app-content">
-        {(error || statusMessage) && (
-          <div className={`status-banner ${error ? 'is-error' : ''}`}>
-            {error || statusMessage}
+        <main className="flex flex-1 flex-col overflow-hidden" id="main" aria-live="polite">
+          {(error || statusMessage) && (
+            <div className={`status-banner ${error ? 'is-error' : ''}`}>{error || statusMessage}</div>
+          )}
+          <div className="flex-1 overflow-hidden p-4">
+            {activeView === 'config' ? (
+              <Suspense fallback={<div className="p-4 text-sm text-slate-500">Loading...</div>}>
+                <ConfigPage
+                  models={models}
+                  providerStatus={providerStatus}
+                  onSavePreferences={handleSavePreferences}
+                  onRefresh={refreshModels}
+                  saving={loading.models}
+                  onClose={handleCloseConfig}
+                />
+              </Suspense>
+            ) : (
+              <div className="grid h-full gap-4 lg:grid-cols-2">
+                <section className="min-h-0 overflow-y-auto rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/50">
+              <ChatPanel
+                messages={messages}
+                onSend={handleSend}
+                isStreaming={loading.chat}
+                onStop={() => controllerRef.current?.abort()}
+                selectedMemories={selectedMemories}
+                onSaveMemory={(message) =>
+                  handleCreateMemory({
+                    title: message.content.slice(0, 60),
+                    content: message.content,
+                    tags: ['#chat'],
+                    category: 'note',
+                    intent: 'inform',
+                  })
+                }
+                systemPrompt={systemPrompt}
+                onSystemPromptChange={setSystemPrompt}
+                systemExpanded={showSystemPrompt}
+                onToggleSystem={() => setShowSystemPrompt((prev) => !prev)}
+                usageStats={stats}
+                activeModel={activeModel}
+                showStatsDetails={showStatsDetails}
+                onToggleStats={() => setShowStatsDetails((prev) => !prev)}
+                onSummarize={handleSummarize}
+                summaryResult={summaryResult}
+                autoSuggest={autoSuggest}
+                onToggleAutoSuggest={(value) => setAutoSuggest(Boolean(value))}
+                contextPreview={contextPreview}
+              />
+            </section>
+                <section className="min-h-0 overflow-y-auto rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/50">
+                  <MemoryPanel
+                    memories={memories}
+                    selectedIds={selectedMemoryIds}
+                    tags={tags}
+                    activeTags={activeTags}
+                    suggestions={suggestions}
+                    searchQuery={searchQuery}
+                    onSearch={setSearchQuery}
+                    onToggleMemory={(memoryId) =>
+                      setSelectedMemoryIds((previous) =>
+                        previous.includes(memoryId)
+                          ? previous.filter((id) => id !== memoryId)
+                          : [...previous, memoryId],
+                      )
+                    }
+                    onSelectAll={handleSelectAllMemories}
+                    onRefresh={() => refreshMemories({ query: searchQuery, tags: activeTags })}
+                    onCreateMemory={handleCreateMemory}
+                    onToggleTag={handleToggleTag}
+                    onClearTags={() => setActiveTags([])}
+                    onExport={handleExportMemories}
+                    onImport={handleImportMemories}
+                    onApproveSuggestion={handleApproveSuggestion}
+                    onCheckDuplicates={handleCheckDuplicates}
+                    duplicateGroups={duplicates}
+                    onMergeDuplicates={handleMergeDuplicates}
+                    onCheckContradictions={handleContradictionCheck}
+                    contradictionReport={contradictionReport}
+                    onOpenConfig={handleOpenConfig}
+                    loading={loading.memories}
+                  />
+                </section>
+              </div>
+            )}
           </div>
-        )}
-        {activeView === 'config' ? (
-          <ConfigPage
-            models={models}
-            providerStatus={providerStatus}
-            onSavePreferences={handleSavePreferences}
-            onRefresh={refreshModels}
-            saving={loading.models}
-            onClose={handleCloseConfig}
-          />
-        ) : (
-          <ChatPanel
-            messages={messages}
-            onSend={handleSend}
-            isStreaming={loading.chat}
-            onStop={() => controllerRef.current?.abort()}
-            selectedMemories={selectedMemories}
-            onSaveMemory={(message) =>
-              handleCreateMemory({
-                title: message.content.slice(0, 60),
-                content: message.content,
-                tags: ['#chat'],
-              })
-            }
-            systemPrompt={systemPrompt}
-            onSystemPromptChange={setSystemPrompt}
-            systemExpanded={showSystemPrompt}
-            onToggleSystem={() => setShowSystemPrompt((prev) => !prev)}
-            usageStats={stats}
-            activeModel={activeModel}
-            showStatsDetails={showStatsDetails}
-            onToggleStats={() => setShowStatsDetails((prev) => !prev)}
-            onSummarize={handleSummarize}
-            summaryResult={summaryResult}
-          />
-        )}
-      </main>
+        </main>
+      </div>
+      <ModelModal
+        open={modelModalOpen}
+        models={models}
+        activeModel={activeModel}
+        onSelect={(model) => handleSelectModel(model)}
+        onClose={closeModelModal}
+      />
     </div>
   )
 }

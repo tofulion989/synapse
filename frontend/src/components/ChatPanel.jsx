@@ -32,6 +32,9 @@ export default function ChatPanel({
   onToggleStats,
   onSummarize,
   summaryResult,
+  autoSuggest,
+  onToggleAutoSuggest,
+  contextPreview,
 }) {
   const [draft, setDraft] = useState('')
   const endRef = useRef(null)
@@ -39,6 +42,16 @@ export default function ChatPanel({
   const systemRef = useRef(null)
   const MAX_LINES = 6
   const SYSTEM_MAX_LINES = 6
+
+  const sendDraftMessage = async () => {
+    const trimmed = draft.trim()
+    if (!trimmed) return
+    await onSend?.(trimmed)
+    setDraft('')
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+    })
+  }
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -77,12 +90,7 @@ export default function ChatPanel({
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    if (!draft.trim()) return
-    await onSend?.(draft.trim())
-    setDraft('')
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus()
-    })
+    await sendDraftMessage()
   }
 
   const formatTokens = (value) => {
@@ -166,8 +174,19 @@ export default function ChatPanel({
         </div>
       )}
 
+      <div className="mb-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={autoSuggest}
+            onChange={(event) => onToggleAutoSuggest?.(event.target.checked)}
+          />
+          Suggest Relevant Memories (AI assist)
+        </label>
+      </div>
+
       <div className="chat-body">
-        <div className="chat-stream">
+        <div className="chat-stream" role="log" aria-live="polite" aria-relevant="additions" tabIndex="0">
           {messages.map((message) => (
             <div key={message.id} className="chat-message-row">
               <MessageBubble role={message.role} content={message.content} />
@@ -212,10 +231,8 @@ export default function ChatPanel({
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
-              handleSubmit(event)
-              requestAnimationFrame(() => {
-                textareaRef.current?.focus()
-              })
+              sendDraftMessage()
+              event.currentTarget?.focus()
             }
           }}
         />
@@ -225,6 +242,12 @@ export default function ChatPanel({
           </button>
         </div>
       </form>
+      {contextPreview && (
+        <div className="mt-2 max-h-32 overflow-y-auto rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+          <strong className="block text-slate-700 dark:text-slate-100">Injected Context:</strong>
+          <pre className="whitespace-pre-wrap">{contextPreview}</pre>
+        </div>
+      )}
     </section>
   )
 }
@@ -262,6 +285,9 @@ ChatPanel.propTypes = {
   onToggleStats: PropTypes.func,
   onSummarize: PropTypes.func,
   summaryResult: PropTypes.string,
+  autoSuggest: PropTypes.bool,
+  onToggleAutoSuggest: PropTypes.func,
+  contextPreview: PropTypes.string,
 }
 
 ChatPanel.defaultProps = {
@@ -274,4 +300,7 @@ ChatPanel.defaultProps = {
   activeModel: '',
   showStatsDetails: false,
   summaryResult: '',
+  autoSuggest: false,
+  contextPreview: '',
+  onToggleAutoSuggest: undefined,
 }

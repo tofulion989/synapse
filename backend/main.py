@@ -9,9 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 import json
 
-from .config import get_settings
 from .llm import LLMRouter
-from .memory import MemoryStore
+from .dependencies import get_llm_router, get_memory_store, settings
+from .services.injection import build_context
+from .routes.memory_routes import router as memory_router
 from .models import (
     ChatRequest,
     ChatResponse,
@@ -35,10 +36,6 @@ from .models import (
 app = FastAPI(title="Synapse Backend", version="0.1.0")
 api_router = APIRouter(prefix="/api", tags=["api"])
 
-settings = get_settings()
-memory_store = MemoryStore(settings=settings)
-llm_router = LLMRouter(settings=settings)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -48,18 +45,10 @@ app.add_middleware(
 )
 
 
-def get_memory_store() -> MemoryStore:
-    return memory_store
-
-
-def get_llm_router() -> LLMRouter:
-    return llm_router
-
-
 def _prepare_chat_messages(
     request: ChatRequest,
     store: MemoryStore,
-) -> Tuple[List[dict], List[str]]:
+) -> Tuple[List[dict], List[str], str]:
     base_messages = [message.model_dump() for message in request.messages]
     messages: List[dict] = []
     used_memory_ids: List[str] = []
@@ -68,29 +57,49 @@ def _prepare_chat_messages(
         messages.append({"role": "system", "content": request.system.strip()})
 
     context_message = None
+    context_preview = ""
 
-    if request.include_memories:
-        selected = store.get_memories_by_ids(request.include_memories)
-        if selected:
-            used_memory_ids = [memory.id for memory in selected]
-            if request.inject_memories:
-                context_block = "\n\n".join(
-                    f"[{memory.title or memory.id}]\n{memory.content}" for memory in selected
-                )
-                context_message = {
-                    "role": "system",
-                    "content": (
-                        "The following context snippets were manually selected by the user.\n"
-                        f"{context_block}"
-                    ),
-                }
+    selected = store.get_memories_by_ids(request.include_memories) if request.include_memories else []
+    if selected:
+        used_memory_ids = [memory.id for memory in selected]
+
+    latest_user_query = ""
+    for message in reversed(request.messages):
+        if message.role == "user":
+            latest_user_query = message.content
+            break
+
+    context_source = selected if request.inject_memories and not request.auto_suggest else []
+    context_preview, auto_ids = build_context(
+        context_source,
+        latest_user_query,
+        use_vectors=request.auto_suggest,
+        fetch_memories_by_ids=store.get_memories_by_ids,
+    )
+
+    if context_preview:
+        context_message = {
+            "role": "system",
+            "content": context_preview,
+        }
+
+    if auto_ids:
+        used_memory_ids.extend(auto_ids)
+        deduped = []
+        seen = set()
+        for memory_id in used_memory_ids:
+            if memory_id in seen:
+                continue
+            deduped.append(memory_id)
+            seen.add(memory_id)
+        used_memory_ids = deduped
 
     if context_message:
         messages.append(context_message)
 
     messages.extend(base_messages)
 
-    return messages, used_memory_ids
+    return messages, used_memory_ids, context_preview
 
 
 @app.get("/health")
@@ -111,13 +120,20 @@ async def list_models(
     force: bool = Query(False),
     router: LLMRouter = Depends(get_llm_router),
 ) -> ModelListResponse:
-    payload = router.get_models(force=force)
-    logging.info(
-        "Model list returned with status %s, models=%s",
-        payload.ollama_status,
-        len(payload.models),
-    )
-    return payload
+    try:
+        payload = router.get_models(force=force)
+        for model in payload.models:
+            if not model.type:
+                model.type = "local" if model.provider == "ollama" else "cloud"
+        logging.info(
+            "Model list returned with status %s, models=%s",
+            payload.ollama_status,
+            len(payload.models),
+        )
+        return payload
+    except Exception as exc:  # pragma: no cover
+        logging.exception("Failed to load models")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @api_router.post("/models/preferences")
@@ -127,26 +143,6 @@ async def update_model_preferences(
 ) -> dict:
     router.update_preferences(request.preferences)
     return {"status": "ok", "updated": len(request.preferences)}
-
-
-@api_router.get("/memories", response_model=List[MemoryRecord])
-async def list_memories(
-    q: Optional[str] = Query(default=None, description="Free-text search query."),
-    tag: Optional[List[str]] = Query(default=None, description="Filter by tag (repeatable)."),
-    limit: int = Query(default=20, le=100),
-    store: MemoryStore = Depends(get_memory_store),
-) -> List[MemoryRecord]:
-    if q or tag:
-        return store.search_memories(query=q, tags=tag, limit=limit)
-    return store.list_memories(limit=limit)
-
-
-@api_router.post("/memories", response_model=MemoryRecord, status_code=201)
-async def create_memory(
-    payload: MemoryCreate,
-    store: MemoryStore = Depends(get_memory_store),
-) -> MemoryRecord:
-    return store.add_memory(payload)
 
 
 @api_router.get("/memories/tags")
@@ -238,7 +234,7 @@ async def chat(
     router: LLMRouter = Depends(get_llm_router),
     store: MemoryStore = Depends(get_memory_store),
 ) -> ChatResponse:
-    messages, used_memory_ids = _prepare_chat_messages(request, store)
+    messages, used_memory_ids, context_preview = _prepare_chat_messages(request, store)
     result = await router.chat(messages=messages, model=request.model)
 
     return ChatResponse(
@@ -248,6 +244,7 @@ async def chat(
         used_memories=used_memory_ids,
         placeholder=result.get("placeholder", False),
         stats=result.get("stats"),
+        context_preview=context_preview,
     )
 
 
@@ -283,13 +280,14 @@ async def chat_stream(
     router: LLMRouter = Depends(get_llm_router),
     store: MemoryStore = Depends(get_memory_store),
 ) -> StreamingResponse:
-    messages, used_memory_ids = _prepare_chat_messages(request, store)
+    messages, used_memory_ids, context_preview = _prepare_chat_messages(request, store)
 
     async def event_generator():
         async for chunk in router.stream_chat(messages=messages, model=request.model):
             payload = {
                 **chunk,
                 "used_memories": used_memory_ids,
+                "context_preview": context_preview,
             }
             yield json.dumps(payload).encode("utf-8") + b"\n"
 
@@ -306,4 +304,5 @@ async def api_health() -> dict:
     return {"status": "ok"}
 
 
+app.include_router(memory_router)
 app.include_router(api_router)

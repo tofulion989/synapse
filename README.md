@@ -1,5 +1,7 @@
 # Synapse
 
+> Current Release: **v0.7.0** (previous stable: **v0.6.6** — see [CHANGELOG](CHANGELOG.md))
+
 Synapse is a modular, self-expanding AI interface that integrates local and cloud models (OpenAI, Ollama, Groq, Anthropic, etc.) through a unified FastAPI backend and React-based frontend. It supports contextual memory, summarization, and model orchestration through a dynamic UI.
 
 ## Features

@@ -15,7 +15,19 @@ except ImportError:  # pragma: no cover - chromadb is an explicit dependency.
     Collection = None  # type: ignore
 
 from .config import Settings, get_settings
-from .models import MemoryCreate, MemoryImportRecord, MemoryRecord
+from .services.embedding import (
+    bulk_register as bulk_register_embeddings,
+    embed as register_embedding,
+    remove as remove_embedding,
+)
+from .services.summary import summarize as summarize_text
+from .models import (
+    MemoryCategory,
+    MemoryCreate,
+    MemoryImportRecord,
+    MemoryIntent,
+    MemoryRecord,
+)
 
 
 def _timestamp() -> str:
@@ -30,6 +42,32 @@ def _deserialise_tags(raw: str | None) -> List[str]:
     if not raw:
         return []
     return [tag for tag in raw.split(",") if tag]
+
+
+def _coerce_category(value) -> str:
+    if isinstance(value, MemoryCategory):
+        return value.value
+    if isinstance(value, str):
+        try:
+            return MemoryCategory(value).value
+        except ValueError:
+            cleaned = value.strip().lower()
+            if cleaned:
+                return cleaned
+    return MemoryCategory.general.value
+
+
+def _coerce_intent(value) -> str:
+    if isinstance(value, MemoryIntent):
+        return value.value
+    if isinstance(value, str):
+        try:
+            return MemoryIntent(value).value
+        except ValueError:
+            cleaned = value.strip().lower()
+            if cleaned:
+                return cleaned
+    return MemoryIntent.inform.value
 
 
 class MemoryStore:
@@ -54,6 +92,7 @@ class MemoryStore:
             except Exception:
                 # Defer vector initialisation failures; SQLite path remains available.
                 self._collection = None
+        self._bootstrap_embeddings()
 
     def _init_db(self) -> None:
         with self._transaction() as cur:
@@ -64,16 +103,40 @@ class MemoryStore:
                     title TEXT,
                     content TEXT NOT NULL,
                     tags TEXT,
+                    category TEXT DEFAULT 'general',
+                    intent TEXT DEFAULT 'inform',
+                    summary TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     source TEXT DEFAULT 'user'
                 )
                 """
             )
-            try:
-                cur.execute("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'user'")
-            except sqlite3.OperationalError:
-                pass
+            for statement in [
+                "ADD COLUMN source TEXT DEFAULT 'user'",
+                "ADD COLUMN category TEXT DEFAULT 'general'",
+                "ADD COLUMN intent TEXT DEFAULT 'inform'",
+                "ADD COLUMN summary TEXT",
+            ]:
+                try:
+                    cur.execute(f"ALTER TABLE memories {statement}")
+                except sqlite3.OperationalError:
+                    pass
+
+    def _bootstrap_embeddings(self) -> None:
+        rows = self._fetch_all_rows()
+        entries = []
+        for row in rows:
+            record = self._row_to_record(row)
+            text = record.summary or record.content or ""
+            if text:
+                entries.append((record.id, text))
+        bulk_register_embeddings(entries)
+
+    def _fetch_all_rows(self) -> List[sqlite3.Row]:
+        with self._transaction() as cur:
+            cur.execute("SELECT * FROM memories ORDER BY datetime(created_at) DESC")
+            return cur.fetchall()
 
     @contextmanager
     def _transaction(self):
@@ -94,23 +157,51 @@ class MemoryStore:
         memory_id = uuid4().hex
         now = _timestamp()
         tags_serialised = _serialise_tags(payload.tags)
+        category_value = _coerce_category(payload.category)
+        intent_value = _coerce_intent(payload.intent)
+        summary_value = payload.summary
+        if not summary_value:
+            generated_summary = summarize_text(payload.content)
+            if generated_summary and generated_summary.strip() != payload.content.strip():
+                summary_value = generated_summary.strip()
 
         with self._transaction() as cur:
             cur.execute(
                 """
-                INSERT INTO memories (id, title, content, tags, created_at, updated_at, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO memories (id, title, content, tags, category, intent, summary, created_at, updated_at, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (memory_id, payload.title, payload.content, tags_serialised, now, now, source),
+                (
+                    memory_id,
+                    payload.title,
+                    payload.content,
+                    tags_serialised,
+                    category_value,
+                    intent_value,
+                    summary_value,
+                    now,
+                    now,
+                    source,
+                ),
             )
 
-        self._upsert_vector(memory_id, payload, metadata={"tags": tags_serialised})
+        self._upsert_vector(
+            memory_id,
+            payload,
+            metadata={"tags": tags_serialised, "category": category_value, "intent": intent_value},
+        )
+        embedding_text = summary_value or payload.content
+        if embedding_text:
+            register_embedding(embedding_text, memory_id)
 
         return MemoryRecord(
             id=memory_id,
             title=payload.title,
             content=payload.content,
             tags=_deserialise_tags(tags_serialised),
+            category=category_value,
+            intent=intent_value,
+            summary=summary_value,
             created_at=datetime.fromisoformat(now),
             updated_at=datetime.fromisoformat(now),
             source=source,
@@ -125,33 +216,67 @@ class MemoryStore:
         created = created_at or now
         updated = updated_at or now
         tags_serialised = _serialise_tags(record.tags)
+        category_value = _coerce_category(record.category)
+        intent_value = _coerce_intent(record.intent)
+        summary_value = record.summary
+        if not summary_value:
+            generated_summary = summarize_text(record.content)
+            if generated_summary and generated_summary.strip() != record.content.strip():
+                summary_value = generated_summary.strip()
 
         with self._transaction() as cur:
             cur.execute(
                 """
-                INSERT INTO memories (id, title, content, tags, created_at, updated_at, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO memories (id, title, content, tags, category, intent, summary, created_at, updated_at, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     title=excluded.title,
                     content=excluded.content,
                     tags=excluded.tags,
+                    category=excluded.category,
+                    intent=excluded.intent,
+                    summary=excluded.summary,
                     updated_at=excluded.updated_at,
                     source=excluded.source
                 """,
-                (memory_id, record.title, record.content, tags_serialised, created, updated, source),
+                (
+                    memory_id,
+                    record.title,
+                    record.content,
+                    tags_serialised,
+                    category_value,
+                    intent_value,
+                    summary_value,
+                    created,
+                    updated,
+                    source,
+                ),
             )
 
         self._upsert_vector(
             memory_id,
-            MemoryCreate(content=record.content, title=record.title, tags=record.tags),
-            metadata={"tags": tags_serialised},
+            MemoryCreate(
+                content=record.content,
+                title=record.title,
+                tags=record.tags,
+                category=category_value,
+                intent=intent_value,
+                summary=summary_value,
+            ),
+            metadata={"tags": tags_serialised, "category": category_value, "intent": intent_value},
         )
+        embedding_text = summary_value or record.content
+        if embedding_text:
+            register_embedding(embedding_text, memory_id)
 
         return MemoryRecord(
             id=memory_id,
             title=record.title,
             content=record.content,
             tags=_deserialise_tags(tags_serialised),
+            category=category_value,
+            intent=intent_value,
+            summary=summary_value,
             created_at=datetime.fromisoformat(created),
             updated_at=datetime.fromisoformat(updated),
             source=source,
@@ -186,6 +311,9 @@ class MemoryStore:
                 self._collection.delete(ids=[memory_id])
             except Exception:
                 pass
+
+        if removed:
+            remove_embedding(memory_id)
 
         return removed
 
@@ -294,6 +422,9 @@ class MemoryStore:
             title=title or "Summary",
             content=summary,
             tags=tags or ["#summary"],
+            category=MemoryCategory.note,
+            intent=MemoryIntent.inform,
+            summary=None,
             created_at=latest_created,
             updated_at=latest_updated,
             source="summary",
@@ -309,6 +440,8 @@ class MemoryStore:
         placeholders = ",".join("?" for _ in memory_ids)
         with self._transaction() as cur:
             cur.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", memory_ids)
+        for memory_id in memory_ids:
+            remove_embedding(memory_id)
 
     def find_duplicates(self, threshold: float = 0.9) -> List[dict]:
         memories = self.list_memories(limit=1000)
@@ -359,11 +492,18 @@ class MemoryStore:
     # ------------------------------------------------------------------ helpers
 
     def _row_to_record(self, row: sqlite3.Row) -> MemoryRecord:
+        row_keys = row.keys()
+        category_value = row["category"] if "category" in row_keys else MemoryCategory.general.value
+        intent_value = row["intent"] if "intent" in row_keys else MemoryIntent.inform.value
+        summary_value = row["summary"] if "summary" in row_keys else None
         record = MemoryRecord(
             id=row["id"],
             title=row["title"],
             content=row["content"],
             tags=_deserialise_tags(row["tags"]),
+            category=category_value,
+            intent=intent_value,
+            summary=summary_value,
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
             source=row["source"] if "source" in row.keys() else "user",
